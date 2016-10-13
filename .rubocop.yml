@@ -16,3 +16,9 @@ Metrics/BlockLength:
 
 Layout/LineLength:
   Max: 120
+
+Layout/EndOfLine:
+  Enabled: false
+
+Naming/MethodParameterName:
+  Enabled: false
