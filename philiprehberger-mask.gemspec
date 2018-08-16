@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.authors       = ['Philip Rehberger']
   spec.email         = ['me@philiprehberger.com']
 
-  spec.summary       = 'Data masking library — auto-detect and redact PII (emails, credit cards, SSNs, tokens) in strings and nested structures'
+  spec.summary       = 'Data masking library with auto-detect PII redaction for strings and nested structures'
   spec.description   = 'Automatically detect and redact sensitive data like emails, credit cards, SSNs, ' \
                        'and tokens in strings and nested structures with configurable patterns.'
   spec.homepage      = 'https://github.com/philiprehberger/rb-mask'
