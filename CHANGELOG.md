@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-11
+
+### Added
+- Add `mode:` parameter to `scrub_hash` for partial and format-preserving masking on nested structures
+- Add `scrub_hash_with_audit` for audit trails on structured data with path tracking
+- Add `add_sensitive_key` to configuration DSL for persistent custom sensitive key registration
+
 ## [0.2.2] - 2026-03-31
 
 ### Added
