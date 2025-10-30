@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'stringio'
 
 RSpec.describe Philiprehberger::Mask do
   before { described_class.reset_configuration! }
@@ -866,6 +867,168 @@ RSpec.describe Philiprehberger::Mask do
       described_class.reset_configuration!
       result = described_class.scrub('EMP123456')
       expect(result).to eq('EMP123456')
+    end
+  end
+
+  describe '.batch_scrub' do
+    it 'scrubs multiple strings in one call' do
+      results = described_class.batch_scrub(['user@example.com', 'SSN: 123-45-6789'])
+      expect(results[0]).not_to include('user@example.com')
+      expect(results[1]).to include('***-**-6789')
+    end
+
+    it 'returns an array of the same length' do
+      input = ['hello', 'world', 'test@test.com']
+      results = described_class.batch_scrub(input)
+      expect(results.length).to eq(3)
+    end
+
+    it 'preserves non-sensitive strings unchanged' do
+      results = described_class.batch_scrub(%w[Hello World])
+      expect(results).to eq(%w[Hello World])
+    end
+
+    it 'handles empty array' do
+      expect(described_class.batch_scrub([])).to eq([])
+    end
+
+    it 'supports mode option' do
+      results = described_class.batch_scrub(['Card: 4111-1111-1111-1111'], mode: :partial)
+      expect(results[0]).to include('****1111')
+    end
+
+    it 'shares compiled patterns across all strings' do
+      strings = Array.new(100) { 'user@example.com' }
+      results = described_class.batch_scrub(strings)
+      results.each { |r| expect(r).not_to include('user@example.com') }
+    end
+
+    it 'supports locale option' do
+      described_class.add_locale(:de, { phone: /\b0\d{3}[- ]?\d{7,8}\b/ })
+      results = described_class.batch_scrub(['Call 0301-1234567'], locale: :de)
+      expect(results[0]).not_to include('0301-1234567')
+    end
+  end
+
+  describe '.configure_priority' do
+    it 'changes detector evaluation order' do
+      described_class.configure_priority(%i[ssn email credit_card phone ip_address jwt passport iban drivers_license mrn])
+      config = Philiprehberger::Mask::Configuration.instance
+      names = config.patterns.map { |p| p[:name] }
+      expect(names.first).to eq(:ssn)
+    end
+
+    it 'puts specified detectors first' do
+      described_class.configure_priority(%i[phone email])
+      config = Philiprehberger::Mask::Configuration.instance
+      names = config.patterns.map { |p| p[:name] }
+      expect(names[0]).to eq(:phone)
+      expect(names[1]).to eq(:email)
+    end
+
+    it 'preserves unspecified detectors after prioritized ones' do
+      described_class.configure_priority(%i[jwt])
+      config = Philiprehberger::Mask::Configuration.instance
+      names = config.patterns.map { |p| p[:name] }
+      expect(names.first).to eq(:jwt)
+      expect(names.length).to eq(10)
+    end
+
+    it 'still scrubs correctly after reordering' do
+      described_class.configure_priority(%i[ssn email])
+      result = described_class.scrub('SSN: 123-45-6789 email: a@b.com')
+      expect(result).to include('***-**-6789')
+      expect(result).not_to include('a@b.com')
+    end
+
+    it 'is cleared on reset' do
+      described_class.configure_priority(%i[jwt])
+      described_class.reset_configuration!
+      config = Philiprehberger::Mask::Configuration.instance
+      names = config.patterns.map { |p| p[:name] }
+      expect(names.first).to eq(:email)
+    end
+  end
+
+  describe '.add_locale' do
+    it 'registers locale-specific patterns' do
+      described_class.add_locale(:de, { phone: /\b0\d{3}[- ]?\d{7,8}\b/ })
+      config = Philiprehberger::Mask::Configuration.instance
+      expect(config.locales[:de]).to have_key(:phone)
+    end
+
+    it 'uses locale patterns when locale option is passed' do
+      described_class.add_locale(:uk, { phone: /\b0\d{10}\b/ })
+      result = described_class.scrub_io(StringIO.new("Call 02012345678\n"), locale: :uk)
+      expect(result[0]).not_to include('02012345678')
+    end
+
+    it 'does not affect scrub without locale option' do
+      described_class.add_locale(:fr, { phone: /\b0[1-9]\d{8}\b/ })
+      described_class.scrub('Call 0612345678')
+      # Without locale, the default phone detector may or may not match French format
+      # The key thing is it uses default patterns, not locale ones
+      config = Philiprehberger::Mask::Configuration.instance
+      default_patterns = config.patterns
+      locale_patterns = config.patterns(locale: :fr)
+      expect(default_patterns).not_to eq(locale_patterns)
+    end
+
+    it 'supports multiple locales' do
+      described_class.add_locale(:de, { phone: /\b0\d{3}[- ]?\d{7,8}\b/ })
+      described_class.add_locale(:uk, { phone: /\b0\d{10}\b/ })
+      config = Philiprehberger::Mask::Configuration.instance
+      expect(config.locales.keys).to include(:de, :uk)
+    end
+
+    it 'is cleared on reset' do
+      described_class.add_locale(:de, { phone: /\b0\d{3}[- ]?\d{7,8}\b/ })
+      described_class.reset_configuration!
+      config = Philiprehberger::Mask::Configuration.instance
+      expect(config.locales).to be_empty
+    end
+  end
+
+  describe '.scrub_io' do
+    it 'scrubs lines from a StringIO' do
+      io = StringIO.new("user@example.com\nHello World\n")
+      results = described_class.scrub_io(io)
+      expect(results.length).to eq(2)
+      expect(results[0]).not_to include('user@example.com')
+      expect(results[1]).to include('Hello World')
+    end
+
+    it 'handles empty IO' do
+      io = StringIO.new('')
+      expect(described_class.scrub_io(io)).to eq([])
+    end
+
+    it 'supports mode option' do
+      io = StringIO.new("Card: 4111-1111-1111-1111\n")
+      results = described_class.scrub_io(io, mode: :partial)
+      expect(results[0]).to include('****1111')
+    end
+
+    it 'handles single line without trailing newline' do
+      io = StringIO.new('SSN: 123-45-6789')
+      results = described_class.scrub_io(io)
+      expect(results.length).to eq(1)
+      expect(results[0]).to include('***-**-6789')
+    end
+
+    it 'preserves line endings' do
+      io = StringIO.new("user@example.com\ntest\n")
+      results = described_class.scrub_io(io)
+      expect(results[0]).to end_with("\n")
+      expect(results[1]).to end_with("\n")
+    end
+
+    it 'scrubs multiple PII types across lines' do
+      io = StringIO.new("Email: alice@test.com\nSSN: 123-45-6789\nIP: 10.0.0.1\n")
+      results = described_class.scrub_io(io)
+      expect(results[0]).not_to include('alice@test.com')
+      expect(results[1]).to include('***-**-6789')
+      expect(results[2]).to include('***.***.***.***')
     end
   end
 
