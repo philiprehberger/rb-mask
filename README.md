@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/philiprehberger/rb-mask/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/rb-mask/actions/workflows/ci.yml)
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-mask.svg)](https://rubygems.org/gems/philiprehberger-mask)
+[![License](https://img.shields.io/github/license/philiprehberger/rb-mask)](LICENSE)
 
 Data masking library — auto-detect and redact PII (emails, credit cards, SSNs, tokens) in strings and nested structures.
 
