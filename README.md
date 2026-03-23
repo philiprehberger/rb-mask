@@ -4,7 +4,7 @@
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-mask.svg)](https://rubygems.org/gems/philiprehberger-mask)
 [![License](https://img.shields.io/github/license/philiprehberger/rb-mask)](LICENSE)
 
-Data masking library — auto-detect and redact PII (emails, credit cards, SSNs, tokens) in strings and nested structures.
+Data masking library — auto-detect and redact PII (emails, credit cards, SSNs, tokens) in strings and nested structures
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Philiprehberger::Mask.configure do |c|
 end
 ```
 
-## Built-in Detectors
+### Built-in Detectors
 
 | Detector | Pattern | Masking |
 |----------|---------|---------|
