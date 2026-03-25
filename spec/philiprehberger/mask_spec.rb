@@ -89,6 +89,108 @@ RSpec.describe Philiprehberger::Mask do
       expect(result).to include('4567')
       expect(result).not_to include('(555)')
     end
+
+    it 'masks credit card numbers without separators' do
+      result = described_class.scrub('Card: 4111111111111111')
+      expect(result).to include('1111')
+      expect(result).not_to include('4111111111111111')
+    end
+
+    it 'masks phone numbers with +1 prefix' do
+      result = described_class.scrub('Call +1-800-555-1234')
+      expect(result).to include('1234')
+      expect(result).not_to include('800')
+    end
+
+    it 'masks phone numbers with dot separators' do
+      result = described_class.scrub('Phone: 555.123.4567')
+      expect(result).to include('4567')
+      expect(result).not_to include('555.123')
+    end
+
+    it 'masks email and preserves the domain TLD' do
+      result = described_class.scrub('user@example.com')
+      expect(result).to include('.com')
+    end
+
+    it 'does not mask a partial JWT-like string' do
+      result = described_class.scrub('eyJhbGci is not a full JWT')
+      expect(result).not_to include('[REDACTED_JWT]')
+    end
+
+    it 'masks IP addresses embedded in longer text' do
+      result = described_class.scrub('Server at 10.0.0.1 responded with 200')
+      expect(result).to include('***.***.***.***')
+      expect(result).to include('responded with 200')
+    end
+
+    it 'returns the original value when input is not a string' do
+      expect(described_class.scrub(nil)).to be_nil
+      expect(described_class.scrub(42)).to eq(42)
+    end
+
+    it 'masks multiple SSNs in a single string' do
+      result = described_class.scrub('SSN1: 111-22-3333 SSN2: 444-55-6666')
+      expect(result).to include('***-**-3333')
+      expect(result).to include('***-**-6666')
+    end
+
+    it 'handles a string with only whitespace' do
+      expect(described_class.scrub('   ')).to eq('   ')
+    end
+
+    it 'masks email with single-character local part' do
+      result = described_class.scrub('a@example.com')
+      expect(result).not_to include('a@example.com')
+      expect(result).to include('.com')
+    end
+
+    it 'masks email with subdomain' do
+      result = described_class.scrub('user@mail.example.co.uk')
+      expect(result).not_to include('user@mail.example.co.uk')
+      expect(result).to include('.uk')
+    end
+
+    it 'masks credit card preserving last four digits with no separators' do
+      result = described_class.scrub('Card: 5500000000005559')
+      expect(result).to include('5559')
+      expect(result).not_to include('5500000000005559')
+    end
+
+    it 'masks multiple IP addresses in one string' do
+      result = described_class.scrub('From 10.0.0.1 to 192.168.1.100')
+      expect(result).not_to include('10.0.0.1')
+      expect(result).not_to include('192.168.1.100')
+      expect(result.scan('***.***.***.***').length).to eq(2)
+    end
+
+    it 'masks multiple JWTs in one string' do
+      jwt1 = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig1'
+      jwt2 = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIyIn0.sig2'
+      result = described_class.scrub("#{jwt1} and #{jwt2}")
+      expect(result.scan('[REDACTED_JWT]').length).to eq(2)
+    end
+
+    it 'handles string with all PII types combined' do
+      input = 'email: a@b.com card: 4111-1111-1111-1111 ssn: 123-45-6789 phone: 555-123-4567 ip: 1.2.3.4'
+      result = described_class.scrub(input)
+      expect(result).not_to include('a@b.com')
+      expect(result).to include('****-****-****-1111')
+      expect(result).to include('***-**-6789')
+      expect(result).to include('***.***.***.***')
+    end
+
+    it 'masks phone number with +1 dot format' do
+      result = described_class.scrub('Call +1.800.555.1234')
+      expect(result).to include('1234')
+      expect(result).not_to include('800.555')
+    end
+
+    it 'preserves surrounding text after scrubbing' do
+      result = described_class.scrub('Hello user@example.com, welcome!')
+      expect(result).to start_with('Hello ')
+      expect(result).to end_with(', welcome!')
+    end
   end
 
   describe '.scrub_hash' do
@@ -208,6 +310,89 @@ RSpec.describe Philiprehberger::Mask do
       result = described_class.scrub_hash(data)
       expect(result[:notes]).not_to include('user@example.com')
     end
+
+    it 'scrubs a top-level array of strings' do
+      data = ['user@example.com', 'Hello']
+      result = described_class.scrub_hash(data)
+      expect(result[0]).not_to include('user@example.com')
+      expect(result[1]).to eq('Hello')
+    end
+
+    it 'scrubs a top-level array of hashes' do
+      data = [{ password: 'secret' }, { name: 'Bob' }]
+      result = described_class.scrub_hash(data)
+      expect(result[0][:password]).to eq('[FILTERED]')
+      expect(result[1][:name]).to eq('Bob')
+    end
+
+    it 'handles float values without modification' do
+      data = { score: 99.5 }
+      result = described_class.scrub_hash(data)
+      expect(result[:score]).to eq(99.5)
+    end
+
+    it 'handles symbol values without modification' do
+      data = { status: :active }
+      result = described_class.scrub_hash(data)
+      expect(result[:status]).to eq(:active)
+    end
+
+    it 'does not modify the original hash' do
+      data = { email: 'user@example.com' }
+      original_email = data[:email]
+      described_class.scrub_hash(data)
+      expect(data[:email]).to eq(original_email)
+    end
+
+    it 'handles mixed arrays with non-string items' do
+      data = { items: [42, nil, true, 'user@example.com'] }
+      result = described_class.scrub_hash(data)
+      expect(result[:items][0]).to eq(42)
+      expect(result[:items][1]).to be_nil
+      expect(result[:items][2]).to be(true)
+      expect(result[:items][3]).not_to include('user@example.com')
+    end
+
+    it 'handles nested arrays within arrays' do
+      data = { matrix: [['user@example.com', 'safe'], ['other@test.com']] }
+      result = described_class.scrub_hash(data)
+      expect(result[:matrix][0][0]).not_to include('user@example.com')
+      expect(result[:matrix][0][1]).to eq('safe')
+      expect(result[:matrix][1][0]).not_to include('other@test.com')
+    end
+
+    it 'custom keys parameter completely overrides default sensitive keys' do
+      data = { password: 'secret', custom: 'hidden' }
+      result = described_class.scrub_hash(data, keys: [:custom])
+      expect(result[:password]).to eq('secret')
+      expect(result[:custom]).to eq('[FILTERED]')
+    end
+
+    it 'handles hash with all nil values' do
+      data = { a: nil, b: nil, c: nil }
+      result = described_class.scrub_hash(data)
+      expect(result).to eq({ a: nil, b: nil, c: nil })
+    end
+
+    it 'handles deeply nested sensitive keys' do
+      data = { level1: { level2: { level3: { token: 'abc123' } } } }
+      result = described_class.scrub_hash(data)
+      expect(result[:level1][:level2][:level3][:token]).to eq('[FILTERED]')
+    end
+
+    it 'handles hash with integer keys' do
+      data = { 1 => 'user@example.com', 2 => 'safe' }
+      result = described_class.scrub_hash(data)
+      expect(result[1]).not_to include('user@example.com')
+      expect(result[2]).to eq('safe')
+    end
+
+    it 'scrubs PII inside arrays of strings at top level' do
+      data = ['SSN: 123-45-6789', 'IP: 10.0.0.1']
+      result = described_class.scrub_hash(data)
+      expect(result[0]).to include('***-**-6789')
+      expect(result[1]).to include('***.***.***.***')
+    end
   end
 
   describe '.configure' do
@@ -249,6 +434,77 @@ RSpec.describe Philiprehberger::Mask do
       described_class.reset_configuration!
       result = described_class.scrub('CUSTOM-12345')
       expect(result).to eq('CUSTOM-12345')
+    end
+
+    it 'restores default sensitive keys after reset' do
+      described_class.reset_configuration!
+      data = { password: 'pw', token: 'tk' }
+      result = described_class.scrub_hash(data)
+      expect(result[:password]).to eq('[FILTERED]')
+      expect(result[:token]).to eq('[FILTERED]')
+    end
+  end
+
+  describe 'Philiprehberger::Mask::Error' do
+    it 'is a subclass of StandardError' do
+      expect(Philiprehberger::Mask::Error.new).to be_a(StandardError)
+    end
+  end
+
+  describe 'VERSION' do
+    it 'follows semantic versioning format' do
+      expect(described_class::VERSION).to match(/\A\d+\.\d+\.\d+\z/)
+    end
+  end
+
+  describe 'Configuration' do
+    it 'returns default sensitive keys' do
+      config = Philiprehberger::Mask::Configuration.instance
+      expect(config.sensitive_keys).to include('password', 'token', 'api_key')
+    end
+
+    it 'includes all expected default sensitive keys' do
+      expected = %w[password secret token authorization api_key apikey access_token refresh_token private_key secret_key]
+      config = Philiprehberger::Mask::Configuration.instance
+      expect(config.sensitive_keys).to match_array(expected)
+    end
+
+    it 'returns builtin plus custom patterns from patterns method' do
+      described_class.configure do |c|
+        c.add_pattern(:test_pat, /TEST/, replacement: '[TEST]')
+      end
+      config = Philiprehberger::Mask::Configuration.instance
+      names = config.patterns.map { |p| p[:name] }
+      expect(names).to include(:email, :credit_card, :ssn, :phone, :ip_address, :jwt, :test_pat)
+    end
+  end
+
+  describe 'Detector' do
+    it 'returns exactly 6 builtin patterns' do
+      patterns = Philiprehberger::Mask::Detector.builtin_patterns
+      expect(patterns.length).to eq(6)
+    end
+
+    it 'each builtin pattern has name, pattern, and replacer keys' do
+      Philiprehberger::Mask::Detector.builtin_patterns.each do |pat|
+        expect(pat).to have_key(:name)
+        expect(pat).to have_key(:pattern)
+        expect(pat).to have_key(:replacer)
+        expect(pat[:pattern]).to be_a(Regexp)
+        expect(pat[:replacer]).to respond_to(:call)
+      end
+    end
+  end
+
+  describe 'custom patterns with scrub_hash' do
+    it 'applies custom patterns inside deep structures' do
+      described_class.configure do |c|
+        c.add_pattern(:account, /ACCT-\d+/, replacement: 'ACCT-XXXX')
+      end
+      data = { info: { ref: 'See ACCT-999' } }
+      result = described_class.scrub_hash(data)
+      expect(result[:info][:ref]).to include('ACCT-XXXX')
+      expect(result[:info][:ref]).not_to include('ACCT-999')
     end
   end
 end
