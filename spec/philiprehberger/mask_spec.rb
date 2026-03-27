@@ -464,7 +464,8 @@ RSpec.describe Philiprehberger::Mask do
     end
 
     it 'includes all expected default sensitive keys' do
-      expected = %w[password secret token authorization api_key apikey access_token refresh_token private_key secret_key]
+      expected = %w[password secret token authorization api_key apikey access_token refresh_token private_key
+                    secret_key]
       config = Philiprehberger::Mask::Configuration.instance
       expect(config.sensitive_keys).to match_array(expected)
     end
