@@ -3,6 +3,7 @@
 [![Tests](https://github.com/philiprehberger/rb-mask/actions/workflows/ci.yml/badge.svg)](https://github.com/philiprehberger/rb-mask/actions/workflows/ci.yml)
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-mask.svg)](https://rubygems.org/gems/philiprehberger-mask)
 [![License](https://img.shields.io/github/license/philiprehberger/rb-mask)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ec6cb9)](https://github.com/sponsors/philiprehberger)
 
 Data masking library with auto-detect PII redaction for strings and nested structures
 
@@ -83,4 +84,4 @@ bundle exec rubocop
 
 ## License
 
-MIT
+[MIT](LICENSE)
