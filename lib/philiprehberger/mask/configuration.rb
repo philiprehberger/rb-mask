@@ -17,7 +17,7 @@ module Philiprehberger
         @sensitive_keys = DEFAULT_SENSITIVE_KEYS.dup
       end
 
-      # Add a custom pattern
+      # Add a custom pattern with a static replacement string
       #
       # @param name [Symbol] pattern name
       # @param pattern [Regexp] the regex pattern
@@ -25,6 +25,18 @@ module Philiprehberger
       def add_pattern(name, pattern, replacement:)
         @mutex.synchronize do
           @custom_patterns << { name: name, pattern: pattern, replacer: ->(_) { replacement } }
+        end
+      end
+
+      # Register a custom detector with a block-based replacer (DSL)
+      #
+      # @param name [Symbol] pattern name
+      # @param pattern [Regexp] the regex pattern
+      # @yield [match] the matched string
+      # @yieldreturn [String] the replacement
+      def detect(name, pattern, &block)
+        @mutex.synchronize do
+          @custom_patterns << { name: name, pattern: pattern, replacer: block }
         end
       end
 

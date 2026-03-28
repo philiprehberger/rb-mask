@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-28
+
+### Added
+- New PII detectors: US passport numbers, IBAN, driver's license, medical record numbers (MRN)
+- Context-preserving masking mode via `scrub(str, mode: :partial)` showing partial info (last 4 digits, first initial)
+- Format-preserving masking mode via `scrub(str, mode: :format_preserving)` replacing chars while keeping separators
+- Tokenization support via `Mask.tokenize(str)` and `Mask.detokenize(masked, tokens:)` for reversible masking
+- Masking audit trail via `Mask.scrub_with_audit(str)` returning detailed detection metadata
+- Custom detector registration DSL via `configure { |c| c.detect(:name, /pattern/) { |match| replacement } }`
+
 ## [0.1.10] - 2026-03-26
 
 ### Changed

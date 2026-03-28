@@ -51,8 +51,6 @@ RSpec.describe Philiprehberger::Mask do
       expect(described_class.scrub('Hello World')).to eq('Hello World')
     end
 
-    # --- Expanded tests ---
-
     it 'masks multiple emails in one string' do
       result = described_class.scrub('From alice@test.com to bob@test.com')
       expect(result).not_to include('alice@test.com')
@@ -191,6 +189,243 @@ RSpec.describe Philiprehberger::Mask do
       expect(result).to start_with('Hello ')
       expect(result).to end_with(', welcome!')
     end
+
+    # --- New PII detectors ---
+
+    it 'masks US passport numbers' do
+      result = described_class.scrub('Passport: C12345678')
+      expect(result).to include('[REDACTED_PASSPORT]')
+      expect(result).not_to include('C12345678')
+    end
+
+    it 'masks multiple passport numbers' do
+      result = described_class.scrub('Passports: A12345678 and B98765432')
+      expect(result.scan('[REDACTED_PASSPORT]').length).to be >= 2
+    end
+
+    it 'masks IBAN numbers' do
+      result = described_class.scrub('IBAN: GB29NWBK60161331926819')
+      expect(result).to include('[REDACTED_IBAN]')
+      expect(result).not_to include('GB29NWBK60161331926819')
+    end
+
+    it 'masks driver license numbers' do
+      result = described_class.scrub('DL: D1234567')
+      expect(result).not_to include('D1234567')
+    end
+
+    it 'masks driver license with 8 digits' do
+      result = described_class.scrub('License: S12345678')
+      expect(result).not_to include('S12345678')
+    end
+
+    it 'masks medical record numbers' do
+      result = described_class.scrub('Record: MRN12345678')
+      expect(result).to include('[REDACTED_MRN]')
+      expect(result).not_to include('MRN12345678')
+    end
+
+    it 'masks MRN with varying digit lengths' do
+      result = described_class.scrub('MRN1234 and MRN999999999')
+      expect(result.scan('[REDACTED_MRN]').length).to eq(2)
+    end
+
+    it 'does not mask MRN with too few digits' do
+      result = described_class.scrub('MRN123')
+      expect(result).to eq('MRN123')
+    end
+  end
+
+  describe '.scrub with mode: :partial' do
+    it 'partially masks credit cards showing last 4' do
+      result = described_class.scrub('Card: 4111-1111-1111-1111', mode: :partial)
+      expect(result).to include('****1111')
+    end
+
+    it 'partially masks SSNs showing last 4' do
+      result = described_class.scrub('SSN: 123-45-6789', mode: :partial)
+      expect(result).to include('***-**-6789')
+    end
+
+    it 'partially masks phone numbers showing last 4' do
+      result = described_class.scrub('Phone: 555-123-4567', mode: :partial)
+      expect(result).to include('***-***-4567')
+    end
+
+    it 'partially masks emails showing first initial' do
+      result = described_class.scrub('Email: user@example.com', mode: :partial)
+      expect(result).to include('u***@example.com')
+    end
+
+    it 'partially masks IP addresses showing last octet' do
+      result = described_class.scrub('IP: 192.168.1.42', mode: :partial)
+      expect(result).to include('***.***.***.42')
+    end
+
+    it 'partially masks unknown patterns with first char visible' do
+      described_class.configure do |c|
+        c.add_pattern(:custom_id, /CUST-\d{8}/, replacement: 'CUST-XXXXXXXX')
+      end
+      result = described_class.scrub('ID: CUST-12345678', mode: :partial)
+      expect(result).to include('C')
+    end
+
+    it 'leaves non-sensitive text unchanged in partial mode' do
+      expect(described_class.scrub('Hello World', mode: :partial)).to eq('Hello World')
+    end
+  end
+
+  describe '.scrub with mode: :format_preserving' do
+    it 'replaces letters with X and digits with 0' do
+      result = described_class.scrub('Email: user@example.com', mode: :format_preserving)
+      expect(result).to include('XXXX@XXXXXXX.XXX')
+    end
+
+    it 'preserves separators in credit cards' do
+      result = described_class.scrub('Card: 4111-1111-1111-1111', mode: :format_preserving)
+      expect(result).to include('0000-0000-0000-0000')
+    end
+
+    it 'preserves SSN format' do
+      result = described_class.scrub('SSN: 123-45-6789', mode: :format_preserving)
+      expect(result).to include('000-00-0000')
+    end
+
+    it 'preserves IP address format with dots' do
+      result = described_class.scrub('IP: 192.168.1.1', mode: :format_preserving)
+      expect(result).to include('000.000.0.0')
+    end
+
+    it 'leaves non-sensitive text unchanged' do
+      expect(described_class.scrub('Hello World', mode: :format_preserving)).to eq('Hello World')
+    end
+
+    it 'handles multiple PII types preserving their formats' do
+      result = described_class.scrub('SSN: 123-45-6789 IP: 10.0.0.1', mode: :format_preserving)
+      expect(result).to include('000-00-0000')
+      expect(result).to include('00.0.0.0')
+    end
+  end
+
+  describe '.tokenize' do
+    it 'replaces PII with tokens' do
+      result = described_class.tokenize('Email: user@example.com')
+      expect(result[:masked]).to include('<TOKEN_EMAIL_1>')
+      expect(result[:masked]).not_to include('user@example.com')
+      expect(result[:tokens]).to have_key('<TOKEN_EMAIL_1>')
+      expect(result[:tokens]['<TOKEN_EMAIL_1>']).to eq('user@example.com')
+    end
+
+    it 'generates unique tokens for each match' do
+      result = described_class.tokenize('alice@test.com and bob@test.com')
+      expect(result[:tokens].keys.length).to eq(2)
+    end
+
+    it 'tokenizes multiple PII types' do
+      result = described_class.tokenize('Email: user@example.com SSN: 123-45-6789')
+      expect(result[:tokens].keys.length).to eq(2)
+      expect(result[:tokens].values).to include('user@example.com', '123-45-6789')
+    end
+
+    it 'returns empty tokens for non-sensitive text' do
+      result = described_class.tokenize('Hello World')
+      expect(result[:masked]).to eq('Hello World')
+      expect(result[:tokens]).to be_empty
+    end
+
+    it 'handles nil input' do
+      result = described_class.tokenize(nil)
+      expect(result[:masked]).to be_nil
+      expect(result[:tokens]).to be_empty
+    end
+  end
+
+  describe '.detokenize' do
+    it 'reverses tokenization' do
+      original = 'Contact user@example.com for help'
+      tokenized = described_class.tokenize(original)
+      restored = described_class.detokenize(tokenized[:masked], tokens: tokenized[:tokens])
+      expect(restored).to eq(original)
+    end
+
+    it 'reverses tokenization with multiple PII types' do
+      original = 'Email: alice@test.com SSN: 111-22-3333'
+      tokenized = described_class.tokenize(original)
+      restored = described_class.detokenize(tokenized[:masked], tokens: tokenized[:tokens])
+      expect(restored).to eq(original)
+    end
+
+    it 'returns the string unchanged with empty tokens' do
+      result = described_class.detokenize('Hello World', tokens: {})
+      expect(result).to eq('Hello World')
+    end
+
+    it 'does not modify the original string' do
+      original = 'Contact user@example.com'
+      tokenized = described_class.tokenize(original)
+      masked_copy = tokenized[:masked].dup
+      described_class.detokenize(tokenized[:masked], tokens: tokenized[:tokens])
+      expect(tokenized[:masked]).to eq(masked_copy)
+    end
+  end
+
+  describe '.scrub_with_audit' do
+    it 'returns the scrubbed result' do
+      result = described_class.scrub_with_audit('Email: user@example.com')
+      expect(result[:result]).not_to include('user@example.com')
+    end
+
+    it 'includes audit entries with detector name' do
+      result = described_class.scrub_with_audit('Email: user@example.com')
+      expect(result[:audit].length).to eq(1)
+      expect(result[:audit][0][:detector]).to eq(:email)
+    end
+
+    it 'includes original and masked values in audit' do
+      result = described_class.scrub_with_audit('SSN: 123-45-6789')
+      entry = result[:audit].find { |a| a[:detector] == :ssn }
+      expect(entry[:original]).to eq('123-45-6789')
+      expect(entry[:masked]).to eq('***-**-6789')
+    end
+
+    it 'includes position in audit entries' do
+      result = described_class.scrub_with_audit('SSN: 123-45-6789')
+      entry = result[:audit].find { |a| a[:detector] == :ssn }
+      expect(entry[:position]).to eq(5)
+    end
+
+    it 'tracks multiple detections' do
+      result = described_class.scrub_with_audit('Email: a@b.com SSN: 123-45-6789')
+      expect(result[:audit].length).to eq(2)
+      detectors = result[:audit].map { |a| a[:detector] }
+      expect(detectors).to include(:email, :ssn)
+    end
+
+    it 'returns empty audit for clean strings' do
+      result = described_class.scrub_with_audit('Hello World')
+      expect(result[:result]).to eq('Hello World')
+      expect(result[:audit]).to be_empty
+    end
+
+    it 'handles nil input' do
+      result = described_class.scrub_with_audit(nil)
+      expect(result[:result]).to be_nil
+      expect(result[:audit]).to be_empty
+    end
+
+    it 'audits new PII types like passport' do
+      result = described_class.scrub_with_audit('Passport: C12345678')
+      entry = result[:audit].find { |a| a[:detector] == :passport }
+      expect(entry).not_to be_nil
+      expect(entry[:original]).to eq('C12345678')
+    end
+
+    it 'audits MRN detections' do
+      result = described_class.scrub_with_audit('Record: MRN12345678')
+      entry = result[:audit].find { |a| a[:detector] == :mrn }
+      expect(entry).not_to be_nil
+      expect(entry[:masked]).to eq('[REDACTED_MRN]')
+    end
   end
 
   describe '.scrub_hash' do
@@ -235,8 +470,6 @@ RSpec.describe Philiprehberger::Mask do
       result = described_class.scrub_hash(data)
       expect(result[:age]).to eq(30)
     end
-
-    # --- Expanded tests ---
 
     it 'redacts all default sensitive key names' do
       data = {
@@ -404,8 +637,6 @@ RSpec.describe Philiprehberger::Mask do
       expect(result).to include('CUST-XXXXXXXX')
     end
 
-    # --- Expanded tests ---
-
     it 'preserves built-in patterns after adding custom ones' do
       described_class.configure do |c|
         c.add_pattern(:custom, /CUSTOM/, replacement: '[CUSTOM]')
@@ -423,6 +654,51 @@ RSpec.describe Philiprehberger::Mask do
       result = described_class.scrub('Order ORD-12345 Ticket TKT-67890')
       expect(result).to include('ORD-XXXX')
       expect(result).to include('TKT-XXXX')
+    end
+
+    it 'supports DSL-style detect with block' do
+      described_class.configure do |c|
+        c.detect(:employee_id, /EMP\d{6}/) { |_match| '[EMPLOYEE_ID]' }
+      end
+      result = described_class.scrub('Employee: EMP123456')
+      expect(result).to include('[EMPLOYEE_ID]')
+      expect(result).not_to include('EMP123456')
+    end
+
+    it 'DSL detect block receives the matched string' do
+      described_class.configure do |c|
+        c.detect(:order, /ORD-\d+/) { |match| "MASKED(#{match.length})" }
+      end
+      result = described_class.scrub('Order: ORD-12345')
+      expect(result).to include('MASKED(9)')
+    end
+
+    it 'supports mixing add_pattern and detect' do
+      described_class.configure do |c|
+        c.add_pattern(:static, /STATIC-\d+/, replacement: '[STATIC]')
+        c.detect(:dynamic, /DYN-\d+/) { |_match| '[DYNAMIC]' }
+      end
+      result = described_class.scrub('STATIC-123 and DYN-456')
+      expect(result).to include('[STATIC]')
+      expect(result).to include('[DYNAMIC]')
+    end
+
+    it 'DSL detectors appear in patterns list' do
+      described_class.configure do |c|
+        c.detect(:employee_id, /EMP\d{6}/) { |_match| '[EMP]' }
+      end
+      config = Philiprehberger::Mask::Configuration.instance
+      names = config.patterns.map { |p| p[:name] }
+      expect(names).to include(:employee_id)
+    end
+
+    it 'DSL detectors work with scrub_hash' do
+      described_class.configure do |c|
+        c.detect(:badge, /BADGE-\d+/) { |_match| '[BADGE]' }
+      end
+      data = { info: 'See BADGE-999' }
+      result = described_class.scrub_hash(data)
+      expect(result[:info]).to include('[BADGE]')
     end
   end
 
@@ -442,6 +718,15 @@ RSpec.describe Philiprehberger::Mask do
       result = described_class.scrub_hash(data)
       expect(result[:password]).to eq('[FILTERED]')
       expect(result[:token]).to eq('[FILTERED]')
+    end
+
+    it 'removes DSL-registered detectors after reset' do
+      described_class.configure do |c|
+        c.detect(:emp, /EMP\d+/) { |_| '[EMP]' }
+      end
+      described_class.reset_configuration!
+      result = described_class.scrub('EMP123456')
+      expect(result).to eq('EMP123456')
     end
   end
 
@@ -481,9 +766,9 @@ RSpec.describe Philiprehberger::Mask do
   end
 
   describe 'Detector' do
-    it 'returns exactly 6 builtin patterns' do
+    it 'returns exactly 10 builtin patterns' do
       patterns = Philiprehberger::Mask::Detector.builtin_patterns
-      expect(patterns.length).to eq(6)
+      expect(patterns.length).to eq(10)
     end
 
     it 'each builtin pattern has name, pattern, and replacer keys' do
@@ -494,6 +779,11 @@ RSpec.describe Philiprehberger::Mask do
         expect(pat[:pattern]).to be_a(Regexp)
         expect(pat[:replacer]).to respond_to(:call)
       end
+    end
+
+    it 'includes new detector types' do
+      names = Philiprehberger::Mask::Detector.builtin_patterns.map { |p| p[:name] }
+      expect(names).to include(:passport, :iban, :drivers_license, :mrn)
     end
   end
 

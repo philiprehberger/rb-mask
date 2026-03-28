@@ -5,7 +5,11 @@ module Philiprehberger
     # Built-in pattern detectors for common PII types
     module Detector
       def self.builtin_patterns
-        [email_pattern, credit_card_pattern, ssn_pattern, phone_pattern, ip_pattern, jwt_pattern]
+        [
+          email_pattern, credit_card_pattern, ssn_pattern, phone_pattern,
+          ip_pattern, jwt_pattern, passport_pattern, iban_pattern,
+          drivers_license_pattern, mrn_pattern
+        ]
       end
 
       def self.email_pattern
@@ -61,6 +65,42 @@ module Philiprehberger
         }
       end
       private_class_method :jwt_pattern
+
+      def self.passport_pattern
+        {
+          name: :passport,
+          pattern: /\b[A-Z]\d{8}\b/,
+          replacer: ->(_match) { '[REDACTED_PASSPORT]' }
+        }
+      end
+      private_class_method :passport_pattern
+
+      def self.iban_pattern
+        {
+          name: :iban,
+          pattern: /\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/,
+          replacer: ->(_match) { '[REDACTED_IBAN]' }
+        }
+      end
+      private_class_method :iban_pattern
+
+      def self.drivers_license_pattern
+        {
+          name: :drivers_license,
+          pattern: /\b[A-Z]\d{6,8}\b/,
+          replacer: ->(_match) { '[REDACTED_DL]' }
+        }
+      end
+      private_class_method :drivers_license_pattern
+
+      def self.mrn_pattern
+        {
+          name: :mrn,
+          pattern: /\bMRN\d{4,}\b/,
+          replacer: ->(_match) { '[REDACTED_MRN]' }
+        }
+      end
+      private_class_method :mrn_pattern
 
       def self.mask_email(email)
         local, domain = email.split('@', 2)
