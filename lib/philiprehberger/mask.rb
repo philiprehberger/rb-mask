@@ -23,10 +23,21 @@ module Philiprehberger
     #
     # @param data [Hash, Array] the input structure
     # @param keys [Array<Symbol, String>, nil] specific keys to scrub
+    # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
     # @return [Hash, Array] the scrubbed structure
-    def self.scrub_hash(data, keys: nil)
+    def self.scrub_hash(data, keys: nil, mode: :full)
       config = Configuration.instance
-      DeepScrubber.call(data, patterns: config.patterns, sensitive_keys: keys || config.sensitive_keys)
+      DeepScrubber.call(data, patterns: config.patterns, sensitive_keys: keys || config.sensitive_keys, mode: mode)
+    end
+
+    # Deep-walk a hash/array and redact sensitive values with audit trail
+    #
+    # @param data [Hash, Array] the input structure
+    # @param keys [Array<Symbol, String>, nil] specific keys to scrub
+    # @return [Hash] { result:, audit: [{detector:, ...}] }
+    def self.scrub_hash_with_audit(data, keys: nil)
+      config = Configuration.instance
+      DeepScrubber.call_with_audit(data, patterns: config.patterns, sensitive_keys: keys || config.sensitive_keys)
     end
 
     # Scrub a string and return an audit trail of what was masked

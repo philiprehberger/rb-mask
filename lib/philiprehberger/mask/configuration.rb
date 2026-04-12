@@ -40,6 +40,16 @@ module Philiprehberger
         end
       end
 
+      # Add a custom sensitive key name
+      #
+      # @param key [Symbol, String] key name to treat as sensitive
+      def add_sensitive_key(key)
+        @mutex.synchronize do
+          normalized = key.to_s.downcase
+          @sensitive_keys << normalized unless @sensitive_keys.include?(normalized)
+        end
+      end
+
       # All patterns (built-in + custom)
       #
       # @return [Array<Hash>]

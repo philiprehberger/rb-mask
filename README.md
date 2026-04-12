@@ -90,11 +90,44 @@ result = Philiprehberger::Mask.scrub_with_audit("SSN: 123-45-6789")
 # => { result: "SSN: ***-**-6789", audit: [{ detector: :ssn, original: "123-45-6789", masked: "***-**-6789", position: 5 }] }
 ```
 
+### Hash Scrubbing with Modes
+
+Apply partial or format-preserving masking to nested structures:
+
+```ruby
+Philiprehberger::Mask.scrub_hash({ card: '4111-1111-1111-1111' }, mode: :partial)
+# => { card: "****1111" }
+
+Philiprehberger::Mask.scrub_hash({ ssn: '123-45-6789' }, mode: :format_preserving)
+# => { ssn: "000-00-0000" }
+```
+
+### Hash Audit Trail
+
+Track what was masked in structured data with path information:
+
+```ruby
+result = Philiprehberger::Mask.scrub_hash_with_audit({ user: { email: 'alice@example.com', password: 'secret' } })
+# => { result: { user: { email: "a***@e******.com", password: "[FILTERED]" } },
+#      audit: [{ detector: :email, path: [:user, :email], ... }, { detector: :sensitive_key, key: "password", path: [:user, :password], ... }] }
+```
+
 ### Custom Patterns
 
 ```ruby
 Philiprehberger::Mask.configure do |c|
   c.add_pattern(:order_id, /ORD-\d{10}/, replacement: "ORD-XXXXXXXXXX")
+end
+```
+
+### Custom Sensitive Keys
+
+Register additional key names to redact in hash scrubbing:
+
+```ruby
+Philiprehberger::Mask.configure do |c|
+  c.add_sensitive_key(:ssn_field)
+  c.add_sensitive_key(:credit_card_number)
 end
 ```
 
@@ -128,12 +161,13 @@ end
 | Method | Description |
 |--------|-------------|
 | `Mask.scrub(string, mode: :full)` | Detect and redact PII in a string |
-| `Mask.scrub_hash(hash, keys: nil)` | Deep-walk and redact hash values |
+| `Mask.scrub_hash(hash, keys: nil, mode: :full)` | Deep-walk and redact hash values |
+| `Mask.scrub_hash_with_audit(hash, keys: nil)` | Deep-walk, redact, and return audit trail with paths |
 | `Mask.scrub_with_audit(string)` | Scrub and return audit trail of detections |
 | `Mask.tokenize(string)` | Replace PII with reversible tokens |
 | `Mask.detokenize(string, tokens:)` | Restore original values from tokens |
-| `Mask.configure { \|c\| ... }` | Register custom patterns or detectors |
-| `Mask.reset_configuration!` | Reset to default patterns |
+| `Mask.configure { \|c\| ... }` | Register custom patterns, detectors, or sensitive keys |
+| `Mask.reset_configuration!` | Reset to default patterns and sensitive keys |
 
 ## Development
 

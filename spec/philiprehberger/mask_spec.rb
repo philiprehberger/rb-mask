@@ -628,6 +628,95 @@ RSpec.describe Philiprehberger::Mask do
     end
   end
 
+  describe '.scrub_hash with mode: :partial' do
+    it 'partially masks email values in hashes' do
+      data = { contact: 'Email: user@example.com' }
+      result = described_class.scrub_hash(data, mode: :partial)
+      expect(result[:contact]).to include('u***@example.com')
+    end
+
+    it 'partially masks credit cards in nested hashes' do
+      data = { payment: { card: '4111-1111-1111-1111' } }
+      result = described_class.scrub_hash(data, mode: :partial)
+      expect(result[:payment][:card]).to include('****1111')
+    end
+
+    it 'still filters sensitive keys regardless of mode' do
+      data = { password: 'secret', name: 'Alice' }
+      result = described_class.scrub_hash(data, mode: :partial)
+      expect(result[:password]).to eq('[FILTERED]')
+      expect(result[:name]).to eq('Alice')
+    end
+  end
+
+  describe '.scrub_hash with mode: :format_preserving' do
+    it 'format-preserves email values in hashes' do
+      data = { contact: 'user@example.com' }
+      result = described_class.scrub_hash(data, mode: :format_preserving)
+      expect(result[:contact]).to include('XXXX@XXXXXXX.XXX')
+    end
+
+    it 'format-preserves SSNs in nested structures' do
+      data = { person: { ssn: '123-45-6789' } }
+      result = described_class.scrub_hash(data, mode: :format_preserving)
+      expect(result[:person][:ssn]).to include('000-00-0000')
+    end
+
+    it 'still filters sensitive keys regardless of mode' do
+      data = { token: 'abc123' }
+      result = described_class.scrub_hash(data, mode: :format_preserving)
+      expect(result[:token]).to eq('[FILTERED]')
+    end
+  end
+
+  describe '.scrub_hash_with_audit' do
+    it 'returns scrubbed result and audit trail' do
+      data = { email: 'user@example.com', name: 'Alice' }
+      result = described_class.scrub_hash_with_audit(data)
+      expect(result[:result][:email]).not_to eq('user@example.com')
+      expect(result[:result][:name]).to eq('Alice')
+      expect(result[:audit]).not_to be_empty
+    end
+
+    it 'tracks PII detections with path' do
+      data = { contact: 'user@example.com' }
+      result = described_class.scrub_hash_with_audit(data)
+      entry = result[:audit].find { |a| a[:detector] == :email }
+      expect(entry).not_to be_nil
+      expect(entry[:path]).to eq([:contact])
+    end
+
+    it 'tracks sensitive key redactions' do
+      data = { password: 'secret123' }
+      result = described_class.scrub_hash_with_audit(data)
+      entry = result[:audit].find { |a| a[:detector] == :sensitive_key }
+      expect(entry).not_to be_nil
+      expect(entry[:key]).to eq('password')
+      expect(entry[:masked]).to eq('[FILTERED]')
+    end
+
+    it 'tracks nested paths' do
+      data = { user: { profile: { ssn: '123-45-6789' } } }
+      result = described_class.scrub_hash_with_audit(data)
+      entry = result[:audit].find { |a| a[:detector] == :ssn }
+      expect(entry).not_to be_nil
+      expect(entry[:path]).to eq(%i[user profile ssn])
+    end
+
+    it 'handles arrays in audit path' do
+      data = { emails: ['user@example.com'] }
+      result = described_class.scrub_hash_with_audit(data)
+      entry = result[:audit].find { |a| a[:detector] == :email }
+      expect(entry[:path]).to eq([:emails, 0])
+    end
+
+    it 'returns empty audit for clean data' do
+      data = { name: 'Alice', age: 30 }
+      result = described_class.scrub_hash_with_audit(data)
+      expect(result[:audit]).to be_empty
+    end
+  end
+
   describe '.configure' do
     it 'adds custom patterns' do
       described_class.configure do |c|
@@ -699,6 +788,56 @@ RSpec.describe Philiprehberger::Mask do
       data = { info: 'See BADGE-999' }
       result = described_class.scrub_hash(data)
       expect(result[:info]).to include('[BADGE]')
+    end
+  end
+
+  describe 'add_sensitive_key' do
+    it 'adds a custom sensitive key via configure' do
+      described_class.configure do |c|
+        c.add_sensitive_key(:ssn_field)
+      end
+      data = { ssn_field: 'some-value' }
+      result = described_class.scrub_hash(data)
+      expect(result[:ssn_field]).to eq('[FILTERED]')
+    end
+
+    it 'preserves default sensitive keys after adding custom ones' do
+      described_class.configure do |c|
+        c.add_sensitive_key(:custom_secret)
+      end
+      data = { password: 'pw', custom_secret: 'val' }
+      result = described_class.scrub_hash(data)
+      expect(result[:password]).to eq('[FILTERED]')
+      expect(result[:custom_secret]).to eq('[FILTERED]')
+    end
+
+    it 'handles string and symbol keys' do
+      described_class.configure do |c|
+        c.add_sensitive_key('my_token')
+      end
+      data = { my_token: 'value' }
+      result = described_class.scrub_hash(data)
+      expect(result[:my_token]).to eq('[FILTERED]')
+    end
+
+    it 'does not add duplicate keys' do
+      described_class.configure do |c|
+        c.add_sensitive_key(:password)
+        c.add_sensitive_key(:password)
+      end
+      config = Philiprehberger::Mask::Configuration.instance
+      count = config.sensitive_keys.count { |k| k == 'password' }
+      expect(count).to eq(1)
+    end
+
+    it 'is cleared on reset' do
+      described_class.configure do |c|
+        c.add_sensitive_key(:custom_key)
+      end
+      described_class.reset_configuration!
+      data = { custom_key: 'value' }
+      result = described_class.scrub_hash(data)
+      expect(result[:custom_key]).to eq('value')
     end
   end
 
