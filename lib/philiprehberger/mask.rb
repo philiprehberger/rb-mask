@@ -67,6 +67,44 @@ module Philiprehberger
       result
     end
 
+    # Process an array of strings in one call with shared compiled patterns
+    #
+    # @param strings [Array<String>] input strings
+    # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
+    # @param locale [Symbol, nil] optional locale for locale-specific patterns
+    # @return [Array<String>] scrubbed strings
+    def self.batch_scrub(strings, mode: :full, locale: nil)
+      patterns = Configuration.instance.patterns(locale: locale)
+      compiled = patterns.map { |pat| pat.merge(pattern: Regexp.new(pat[:pattern].source, pat[:pattern].options)) }
+      strings.map { |s| Scrubber.call(s, patterns: compiled, mode: mode) }
+    end
+
+    # Set detector evaluation priority
+    #
+    # @param detector_order [Array<Symbol>] detector names in desired order
+    def self.configure_priority(detector_order)
+      Configuration.instance.set_priority(detector_order)
+    end
+
+    # Register locale-specific patterns
+    #
+    # @param locale [Symbol] locale identifier
+    # @param patterns [Hash<Symbol, Regexp>] detector name to regex mapping
+    def self.add_locale(locale, patterns)
+      Configuration.instance.add_locale(locale, patterns)
+    end
+
+    # Read from IO line by line, scrub each line
+    #
+    # @param io [IO, StringIO] readable IO object
+    # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
+    # @param locale [Symbol, nil] optional locale for locale-specific patterns
+    # @return [Array<String>] scrubbed lines
+    def self.scrub_io(io, mode: :full, locale: nil)
+      patterns = Configuration.instance.patterns(locale: locale)
+      io.each_line.map { |line| Scrubber.call(line, patterns: patterns, mode: mode) }
+    end
+
     # Configure custom patterns
     #
     # @yield [Configuration] the configuration instance

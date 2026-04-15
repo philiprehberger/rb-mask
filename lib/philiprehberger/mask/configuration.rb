@@ -9,12 +9,14 @@ module Philiprehberger
         access_token refresh_token private_key secret_key
       ].freeze
 
-      attr_reader :sensitive_keys
+      attr_reader :sensitive_keys, :detector_priority, :locales
 
       def initialize
         @mutex = Mutex.new
         @custom_patterns = []
         @sensitive_keys = DEFAULT_SENSITIVE_KEYS.dup
+        @detector_priority = nil
+        @locales = {}
       end
 
       # Add a custom pattern with a static replacement string
@@ -50,21 +52,66 @@ module Philiprehberger
         end
       end
 
-      # All patterns (built-in + custom)
+      # Set detector evaluation priority
       #
+      # @param order [Array<Symbol>] detector names in desired evaluation order
+      def set_priority(order)
+        @mutex.synchronize { @detector_priority = order.map(&:to_sym) }
+      end
+
+      # Register locale-specific patterns
+      #
+      # @param locale [Symbol] locale identifier
+      # @param patterns_hash [Hash<Symbol, Regexp>] detector name to regex mapping
+      def add_locale(locale, patterns_hash)
+        @mutex.synchronize do
+          @locales[locale.to_sym] = patterns_hash.each_with_object({}) do |(name, regex), hash|
+            hash[name.to_sym] = regex
+          end
+        end
+      end
+
+      # All patterns (built-in + custom), optionally reordered by priority
+      #
+      # @param locale [Symbol, nil] optional locale for locale-specific patterns
       # @return [Array<Hash>]
-      def patterns
-        @mutex.synchronize { Detector.builtin_patterns + @custom_patterns }
+      def patterns(locale: nil)
+        @mutex.synchronize do
+          base = Detector.builtin_patterns + @custom_patterns
+          base = apply_locale(base, locale) if locale && @locales.key?(locale)
+          @detector_priority ? reorder(base, @detector_priority) : base
+        end
+      end
+
+      private
+
+      def reorder(patterns_list, order)
+        by_name = patterns_list.group_by { |p| p[:name] }
+        ordered = order.flat_map { |name| by_name.delete(name) || [] }
+        ordered + by_name.values.flatten(1)
+      end
+
+      def apply_locale(base, locale)
+        locale_patterns = @locales[locale]
+        base.map do |pat|
+          if locale_patterns.key?(pat[:name])
+            pat.merge(pattern: locale_patterns[pat[:name]])
+          else
+            pat
+          end
+        end
       end
 
       @instance_mutex = Mutex.new
 
-      def self.instance
-        @instance_mutex.synchronize { @instance ||= new }
-      end
+      class << self
+        def instance
+          @instance_mutex.synchronize { @instance ||= new }
+        end
 
-      def self.reset!
-        @instance_mutex.synchronize { @instance = new }
+        def reset!
+          @instance_mutex.synchronize { @instance = new }
+        end
       end
     end
   end

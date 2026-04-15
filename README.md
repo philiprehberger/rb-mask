@@ -112,6 +112,53 @@ result = Philiprehberger::Mask.scrub_hash_with_audit({ user: { email: 'alice@exa
 #      audit: [{ detector: :email, path: [:user, :email], ... }, { detector: :sensitive_key, key: "password", path: [:user, :password], ... }] }
 ```
 
+### Batch Processing
+
+Process multiple strings efficiently with shared compiled patterns:
+
+```ruby
+results = Philiprehberger::Mask.batch_scrub([
+  "Contact user@example.com",
+  "SSN: 123-45-6789",
+  "Call 555-123-4567"
+])
+# => ["Contact u***@e******.com", "SSN: ***-**-6789", "Call ***-***-4567"]
+```
+
+### Detector Priority
+
+Control which detector wins when patterns overlap:
+
+```ruby
+Philiprehberger::Mask.configure_priority(%i[ssn phone email credit_card ip_address jwt passport iban drivers_license mrn])
+# SSN detector now evaluates first
+```
+
+### Locale Patterns
+
+Register locale-specific detection patterns:
+
+```ruby
+Philiprehberger::Mask.add_locale(:de, { phone: /\b0\d{3}[- ]?\d{7,8}\b/ })
+
+# Use locale patterns with scrub_io or batch_scrub
+Philiprehberger::Mask.batch_scrub(["Call 0301-1234567"], locale: :de)
+```
+
+### IO Streaming
+
+Scrub IO sources line by line:
+
+```ruby
+io = StringIO.new("user@example.com\nSSN: 123-45-6789\n")
+results = Philiprehberger::Mask.scrub_io(io)
+# => ["u***@e******.com\n", "SSN: ***-**-6789\n"]
+
+File.open("sensitive.log") do |f|
+  scrubbed_lines = Philiprehberger::Mask.scrub_io(f, mode: :partial)
+end
+```
+
 ### Custom Patterns
 
 ```ruby
@@ -164,8 +211,12 @@ end
 | `Mask.scrub_hash(hash, keys: nil, mode: :full)` | Deep-walk and redact hash values |
 | `Mask.scrub_hash_with_audit(hash, keys: nil)` | Deep-walk, redact, and return audit trail with paths |
 | `Mask.scrub_with_audit(string)` | Scrub and return audit trail of detections |
+| `Mask.batch_scrub(strings, **opts)` | Process array of strings with shared compiled patterns |
+| `Mask.scrub_io(io, **opts)` | Read IO line by line and scrub each line |
 | `Mask.tokenize(string)` | Replace PII with reversible tokens |
 | `Mask.detokenize(string, tokens:)` | Restore original values from tokens |
+| `Mask.configure_priority(detector_order)` | Set detector evaluation order |
+| `Mask.add_locale(locale, patterns)` | Register locale-specific detection patterns |
 | `Mask.configure { \|c\| ... }` | Register custom patterns, detectors, or sensitive keys |
 | `Mask.reset_configuration!` | Reset to default patterns and sensitive keys |
 

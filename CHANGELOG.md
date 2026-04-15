@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-14
+
+### Added
+- Add `Mask.batch_scrub(strings, **opts)` for processing arrays of strings with shared compiled patterns
+- Add `Mask.configure_priority(detector_order)` to control detector evaluation order
+- Add `Mask.add_locale(locale, patterns)` for registering locale-specific detection patterns
+- Add `Mask.scrub_io(io, **opts)` for line-by-line IO scrubbing
+
 ## [0.3.0] - 2026-04-11
 
 ### Added
