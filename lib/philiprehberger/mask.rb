@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'tempfile'
 require_relative 'mask/version'
 require_relative 'mask/configuration'
 require_relative 'mask/detector'
@@ -103,6 +104,44 @@ module Philiprehberger
     def self.scrub_io(io, mode: :full, locale: nil)
       patterns = Configuration.instance.patterns(locale: locale)
       io.each_line.map { |line| Scrubber.call(line, patterns: patterns, mode: mode) }
+    end
+
+    # Read a file line by line, scrub each line, and write the result
+    #
+    # @param path [String] path to the file to scrub
+    # @param output [String, nil] destination path; overwrites in-place if nil
+    # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
+    # @param locale [Symbol, nil] optional locale for locale-specific patterns
+    # @return [Hash] { lines_processed:, lines_modified:, detections: }
+    def self.scrub_log(path, output: nil, mode: :full, locale: nil)
+      patterns = Configuration.instance.patterns(locale: locale)
+      lines_processed = 0
+      lines_modified = 0
+      detections = 0
+
+      scrubbed_lines = File.open(path, 'r') do |f|
+        f.each_line.map do |line|
+          lines_processed += 1
+          scrubbed = Scrubber.call(line, patterns: patterns, mode: mode)
+          if scrubbed != line
+            lines_modified += 1
+            detections += Scrubber.call_with_audit(line, patterns: patterns)[:audit].length
+          end
+          scrubbed
+        end
+      end
+
+      if output.nil?
+        Tempfile.open([File.basename(path), '.tmp'], File.dirname(path)) do |tmp|
+          tmp.write(scrubbed_lines.join)
+          tmp.flush
+          File.rename(tmp.path, path)
+        end
+      else
+        File.write(output, scrubbed_lines.join)
+      end
+
+      { lines_processed: lines_processed, lines_modified: lines_modified, detections: detections }
     end
 
     # Configure custom patterns

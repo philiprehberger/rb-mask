@@ -159,6 +159,22 @@ File.open("sensitive.log") do |f|
 end
 ```
 
+### Log File Scrubbing
+
+Scrub a log file in-place (atomic temp-file swap) or write to a separate output path:
+
+```ruby
+# In-place overwrite
+summary = Philiprehberger::Mask.scrub_log('production.log')
+# => { lines_processed: 1200, lines_modified: 43, detections: 51 }
+
+# Write to a separate file
+Philiprehberger::Mask.scrub_log('production.log', output: 'production.scrubbed.log')
+
+# With masking mode and locale
+Philiprehberger::Mask.scrub_log('app.log', mode: :partial, locale: :de)
+```
+
 ### Custom Patterns
 
 ```ruby
@@ -213,6 +229,7 @@ end
 | `Mask.scrub_with_audit(string)` | Scrub and return audit trail of detections |
 | `Mask.batch_scrub(strings, **opts)` | Process array of strings with shared compiled patterns |
 | `Mask.scrub_io(io, **opts)` | Read IO line by line and scrub each line |
+| `Mask.scrub_log(path, output: nil, mode: :full, locale: nil)` | Scrub a log file in-place or to an output path; returns `{ lines_processed:, lines_modified:, detections: }` |
 | `Mask.tokenize(string)` | Replace PII with reversible tokens |
 | `Mask.detokenize(string, tokens:)` | Restore original values from tokens |
 | `Mask.configure_priority(detector_order)` | Set detector evaluation order |
