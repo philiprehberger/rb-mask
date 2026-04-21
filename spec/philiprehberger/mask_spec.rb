@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'stringio'
+require 'tempfile'
 
 RSpec.describe Philiprehberger::Mask do
   before { described_class.reset_configuration! }
@@ -1029,6 +1030,132 @@ RSpec.describe Philiprehberger::Mask do
       expect(results[0]).not_to include('alice@test.com')
       expect(results[1]).to include('***-**-6789')
       expect(results[2]).to include('***.***.***.***')
+    end
+  end
+
+  describe '.scrub_log' do
+    it 'overwrites the file in-place when output is nil' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("user@example.com\nHello World\n")
+        f.flush
+        described_class.scrub_log(f.path)
+        content = File.read(f.path)
+        expect(content).not_to include('user@example.com')
+        expect(content).to include('Hello World')
+      end
+    end
+
+    it 'writes to the output path when output is provided' do
+      source = Tempfile.new(['mask_src', '.log'])
+      dest = Tempfile.new(['mask_dst', '.log'])
+      begin
+        source.write("SSN: 123-45-6789\n")
+        source.flush
+        described_class.scrub_log(source.path, output: dest.path)
+        content = File.read(dest.path)
+        expect(content).to include('***-**-6789')
+        expect(content).not_to include('123-45-6789')
+      ensure
+        source.close
+        source.unlink
+        dest.close
+        dest.unlink
+      end
+    end
+
+    it 'returns a summary hash with correct keys' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("user@example.com\nHello World\n")
+        f.flush
+        result = described_class.scrub_log(f.path)
+        expect(result).to have_key(:lines_processed)
+        expect(result).to have_key(:lines_modified)
+        expect(result).to have_key(:detections)
+      end
+    end
+
+    it 'counts lines_processed correctly' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("user@example.com\nHello World\nSSN: 123-45-6789\n")
+        f.flush
+        result = described_class.scrub_log(f.path)
+        expect(result[:lines_processed]).to eq(3)
+      end
+    end
+
+    it 'counts lines_modified correctly' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("user@example.com\nHello World\nSSN: 123-45-6789\n")
+        f.flush
+        result = described_class.scrub_log(f.path)
+        expect(result[:lines_modified]).to eq(2)
+      end
+    end
+
+    it 'counts detections correctly' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("user@example.com\nSSN: 123-45-6789\n")
+        f.flush
+        result = described_class.scrub_log(f.path)
+        expect(result[:detections]).to eq(2)
+      end
+    end
+
+    it 'handles an empty file' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        result = described_class.scrub_log(f.path)
+        expect(result[:lines_processed]).to eq(0)
+        expect(result[:lines_modified]).to eq(0)
+        expect(result[:detections]).to eq(0)
+      end
+    end
+
+    it 'preserves clean lines unchanged in-place' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("Hello World\nFoo Bar\n")
+        f.flush
+        described_class.scrub_log(f.path)
+        content = File.read(f.path)
+        expect(content).to eq("Hello World\nFoo Bar\n")
+      end
+    end
+
+    it 'supports mode option' do
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("Card: 4111-1111-1111-1111\n")
+        f.flush
+        described_class.scrub_log(f.path, mode: :partial)
+        content = File.read(f.path)
+        expect(content).to include('****1111')
+      end
+    end
+
+    it 'supports locale option' do
+      described_class.add_locale(:de, { phone: /\b0\d{3}[- ]?\d{7,8}\b/ })
+      Tempfile.create(['mask_log', '.log']) do |f|
+        f.write("Call 0301-1234567\n")
+        f.flush
+        described_class.scrub_log(f.path, locale: :de)
+        content = File.read(f.path)
+        expect(content).not_to include('0301-1234567')
+      end
+    end
+
+    it 'does not modify the source file when output is provided' do
+      source = Tempfile.new(['mask_src', '.log'])
+      dest = Tempfile.new(['mask_dst', '.log'])
+      begin
+        original_content = "user@example.com\n"
+        source.write(original_content)
+        source.flush
+        described_class.scrub_log(source.path, output: dest.path)
+        expect(File.read(source.path)).to eq(original_content)
+      ensure
+        source.close
+        source.unlink
+        dest.close
+        dest.unlink
+      end
     end
   end
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-16
+
+### Added
+- Add `Mask.scrub_log(path, output: nil, mode: :full, locale: nil)` for file-based PII scrubbing with atomic in-place overwrite and summary reporting
+
 ## [0.4.0] - 2026-04-14
 
 ### Added
