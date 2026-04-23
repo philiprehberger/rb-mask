@@ -16,6 +16,9 @@ module Philiprehberger
     # @param string [String] the input string
     # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
     # @return [String] the scrubbed string
+    # @example Mask an email in a string
+    #   Philiprehberger::Mask.scrub('Contact user@example.com')
+    #   # => "Contact u***@e******.com"
     def self.scrub(string, mode: :full)
       Scrubber.call(string, patterns: Configuration.instance.patterns, mode: mode)
     end
@@ -26,6 +29,9 @@ module Philiprehberger
     # @param keys [Array<Symbol, String>, nil] specific keys to scrub
     # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
     # @return [Hash, Array] the scrubbed structure
+    # @example Redact sensitive keys and PII inside nested structures
+    #   Philiprehberger::Mask.scrub_hash(user: { email: 'a@b.com', password: 'secret' })
+    #   # => { user: { email: "a***@b.com", password: "[FILTERED]" } }
     def self.scrub_hash(data, keys: nil, mode: :full)
       config = Configuration.instance
       DeepScrubber.call(data, patterns: config.patterns, sensitive_keys: keys || config.sensitive_keys, mode: mode)
@@ -53,6 +59,9 @@ module Philiprehberger
     #
     # @param string [String] the input string
     # @return [Hash] { masked:, tokens: {} }
+    # @example Replace PII with reversible tokens
+    #   result = Philiprehberger::Mask.tokenize('Contact user@example.com')
+    #   # => { masked: "Contact <TOKEN_EMAIL_1>", tokens: { "<TOKEN_EMAIL_1>" => "user@example.com" } }
     def self.tokenize(string)
       Scrubber.call_with_tokens(string, patterns: Configuration.instance.patterns)
     end
@@ -70,11 +79,19 @@ module Philiprehberger
 
     # Process an array of strings in one call with shared compiled patterns
     #
+    # Raises ArgumentError when +strings+ is not an Array. An empty Array returns +[]+.
+    #
     # @param strings [Array<String>] input strings
     # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
     # @param locale [Symbol, nil] optional locale for locale-specific patterns
-    # @return [Array<String>] scrubbed strings
+    # @return [Array<String>] scrubbed strings (empty Array for empty input)
+    # @raise [ArgumentError] if +strings+ is not an Array
+    # @example Scrub several strings at once
+    #   Philiprehberger::Mask.batch_scrub(['user@example.com', 'SSN: 123-45-6789'])
+    #   # => ["u***@e******.com", "SSN: ***-**-6789"]
     def self.batch_scrub(strings, mode: :full, locale: nil)
+      raise ArgumentError, 'strings must be an Array' unless strings.is_a?(Array)
+
       patterns = Configuration.instance.patterns(locale: locale)
       compiled = patterns.map { |pat| pat.merge(pattern: Regexp.new(pat[:pattern].source, pat[:pattern].options)) }
       strings.map { |s| Scrubber.call(s, patterns: compiled, mode: mode) }
@@ -97,11 +114,21 @@ module Philiprehberger
 
     # Read from IO line by line, scrub each line
     #
+    # Raises ArgumentError when +io+ is nil. An IO that is already at EOF (or empty)
+    # returns an empty Array rather than raising.
+    #
     # @param io [IO, StringIO] readable IO object
     # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
     # @param locale [Symbol, nil] optional locale for locale-specific patterns
-    # @return [Array<String>] scrubbed lines
+    # @return [Array<String>] scrubbed lines (empty Array when the IO is at EOF)
+    # @raise [ArgumentError] if +io+ is nil
+    # @example Scrub lines from an in-memory IO
+    #   Philiprehberger::Mask.scrub_io(StringIO.new("user@example.com\n"))
+    #   # => ["u***@e******.com\n"]
     def self.scrub_io(io, mode: :full, locale: nil)
+      raise ArgumentError, 'io is required' if io.nil?
+      return [] if io.respond_to?(:eof?) && io.eof?
+
       patterns = Configuration.instance.patterns(locale: locale)
       io.each_line.map { |line| Scrubber.call(line, patterns: patterns, mode: mode) }
     end

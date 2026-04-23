@@ -227,8 +227,8 @@ end
 | `Mask.scrub_hash(hash, keys: nil, mode: :full)` | Deep-walk and redact hash values |
 | `Mask.scrub_hash_with_audit(hash, keys: nil)` | Deep-walk, redact, and return audit trail with paths |
 | `Mask.scrub_with_audit(string)` | Scrub and return audit trail of detections |
-| `Mask.batch_scrub(strings, **opts)` | Process array of strings with shared compiled patterns |
-| `Mask.scrub_io(io, **opts)` | Read IO line by line and scrub each line |
+| `Mask.batch_scrub(strings, **opts)` | Process array of strings with shared compiled patterns (raises `ArgumentError` on non-Array; empty Array returns `[]`) |
+| `Mask.scrub_io(io, **opts)` | Read IO line by line and scrub each line (raises `ArgumentError` on nil; returns `[]` when the IO is at EOF) |
 | `Mask.scrub_log(path, output: nil, mode: :full, locale: nil)` | Scrub a log file in-place or to an output path; returns `{ lines_processed:, lines_modified:, detections: }` |
 | `Mask.tokenize(string)` | Replace PII with reversible tokens |
 | `Mask.detokenize(string, tokens:)` | Restore original values from tokens |

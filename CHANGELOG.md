@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-23
+
+### Fixed
+- `scrub_io` now raises `ArgumentError` on nil input and handles empty/EOF IO without error.
+
+### Changed
+- `batch_scrub` now raises `ArgumentError` on non-Array input (was previously undefined behavior).
+- Added `@example` YARD blocks on the primary public methods.
+
 ## [0.5.0] - 2026-04-16
 
 ### Added

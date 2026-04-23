@@ -890,7 +890,18 @@ RSpec.describe Philiprehberger::Mask do
     end
 
     it 'handles empty array' do
+      # Empty Array input is intentionally supported and returns [] without raising.
       expect(described_class.batch_scrub([])).to eq([])
+    end
+
+    it 'raises ArgumentError when strings is not an Array' do
+      expect { described_class.batch_scrub('not an array') }
+        .to raise_error(ArgumentError, /Array/)
+    end
+
+    it 'raises ArgumentError when strings is nil' do
+      expect { described_class.batch_scrub(nil) }
+        .to raise_error(ArgumentError, /Array/)
     end
 
     it 'supports mode option' do
@@ -1002,6 +1013,17 @@ RSpec.describe Philiprehberger::Mask do
     it 'handles empty IO' do
       io = StringIO.new('')
       expect(described_class.scrub_io(io)).to eq([])
+    end
+
+    it 'returns an empty array when the IO is already at EOF' do
+      io = StringIO.new("user@example.com\n")
+      io.read # advance past all content
+      expect(described_class.scrub_io(io)).to eq([])
+    end
+
+    it 'raises ArgumentError when io is nil' do
+      expect { described_class.scrub_io(nil) }
+        .to raise_error(ArgumentError, /required/)
     end
 
     it 'supports mode option' do
