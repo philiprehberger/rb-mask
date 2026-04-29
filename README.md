@@ -33,6 +33,23 @@ Philiprehberger::Mask.scrub("Contact us at user@example.com")
 # => "Contact us at u***@e******.com"
 ```
 
+### Detection
+
+Pre-scan a string for PII without modifying it. Each match reports the
+detector name, the matched substring, and its byte position:
+
+```ruby
+Philiprehberger::Mask.detect("Email user@example.com or call 555-123-4567")
+# => [
+#   { detector: :email, match: "user@example.com", position: 6 },
+#   { detector: :phone, match: "555-123-4567",     position: 31 }
+# ]
+
+# No PII => empty array
+Philiprehberger::Mask.detect("Hello, world.")
+# => []
+```
+
 ### Hash Scrubbing
 
 ```ruby
@@ -224,6 +241,7 @@ end
 | Method | Description |
 |--------|-------------|
 | `Mask.scrub(string, mode: :full)` | Detect and redact PII in a string |
+| `Mask.detect(string, locale: nil)` | Non-mutating scan; returns `[{ detector:, match:, position: }, ...]` |
 | `Mask.scrub_hash(hash, keys: nil, mode: :full)` | Deep-walk and redact hash values |
 | `Mask.scrub_hash_with_audit(hash, keys: nil)` | Deep-walk, redact, and return audit trail with paths |
 | `Mask.scrub_with_audit(string)` | Scrub and return audit trail of detections |

@@ -23,6 +23,24 @@ module Philiprehberger
       Scrubber.call(string, patterns: Configuration.instance.patterns, mode: mode)
     end
 
+    # Scan a string for PII without modifying it
+    #
+    # Returns the list of detector matches in detection order. Each entry has
+    # +:detector+, +:match+, and +:position+. Useful for "should this be
+    # redacted?" checks before the cost of substitution. The input string is
+    # not mutated.
+    #
+    # @param string [String] the input string
+    # @param locale [Symbol, nil] optional locale for locale-specific patterns
+    # @return [Array<Hash>] [{ detector:, match:, position: }, ...] (empty when no PII)
+    # @example Detect PII without redacting
+    #   Philiprehberger::Mask.detect('Email user@example.com or call 555-123-4567')
+    #   # => [{ detector: :email, match: "user@example.com", position: 6 },
+    #   #     { detector: :phone, match: "555-123-4567", position: 31 }]
+    def self.detect(string, locale: nil)
+      Scrubber.scan(string, patterns: Configuration.instance.patterns(locale: locale))
+    end
+
     # Deep-walk a hash/array and redact sensitive values
     #
     # @param data [Hash, Array] the input structure

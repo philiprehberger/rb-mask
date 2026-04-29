@@ -22,6 +22,24 @@ module Philiprehberger
         result
       end
 
+      # Scan a string for matches without modifying it
+      #
+      # @param string [String] the input string
+      # @param patterns [Array<Hash>] pattern definitions
+      # @return [Array<Hash>] [{ detector:, match:, position: }, ...] in detection order
+      def self.scan(string, patterns:)
+        return [] unless string.is_a?(String)
+
+        results = []
+        patterns.each do |pat|
+          string.scan(pat[:pattern]) do |_|
+            md = Regexp.last_match
+            results << { detector: pat[:name], match: md[0], position: md.begin(0) }
+          end
+        end
+        results
+      end
+
       # Apply all patterns and collect audit trail
       #
       # @param string [String] the input string

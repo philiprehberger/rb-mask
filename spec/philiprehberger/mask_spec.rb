@@ -309,6 +309,41 @@ RSpec.describe Philiprehberger::Mask do
     end
   end
 
+  describe '.detect' do
+    it 'returns matches without modifying input' do
+      input = 'Email user@example.com or call 555-123-4567'
+      original = input.dup
+      result = described_class.detect(input)
+
+      expect(input).to eq(original)
+      detectors = result.map { |r| r[:detector] }
+      expect(detectors).to include(:email, :phone)
+    end
+
+    it 'records match text and position' do
+      result = described_class.detect('Contact user@example.com')
+      email = result.find { |r| r[:detector] == :email }
+
+      expect(email[:match]).to eq('user@example.com')
+      expect(email[:position]).to eq(8)
+    end
+
+    it 'returns an empty array when no PII is present' do
+      expect(described_class.detect('Hello, world.')).to eq([])
+    end
+
+    it 'returns an empty array for non-string input' do
+      expect(described_class.detect(nil)).to eq([])
+      expect(described_class.detect(42)).to eq([])
+    end
+
+    it 'respects locale-specific patterns' do
+      described_class.add_locale(:de, phone: /\b0\d{3}-\d{7}\b/)
+      result = described_class.detect('Call 0301-1234567', locale: :de)
+      expect(result.map { |r| r[:detector] }).to include(:phone)
+    end
+  end
+
   describe '.tokenize' do
     it 'replaces PII with tokens' do
       result = described_class.tokenize('Email: user@example.com')

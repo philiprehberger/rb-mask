@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-28
+
+### Added
+- `Mask.detect(string, locale: nil)` — non-mutating PII pre-scan returning `[{ detector:, match:, position: }, ...]` in detection order. Useful for "should this be redacted?" guard checks before paying the substitution cost.
+
 ## [0.5.1] - 2026-04-23
 
 ### Fixed
