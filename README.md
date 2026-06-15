@@ -4,6 +4,8 @@
 [![Gem Version](https://badge.fury.io/rb/philiprehberger-mask.svg)](https://rubygems.org/gems/philiprehberger-mask)
 [![Last updated](https://img.shields.io/github/last-commit/philiprehberger/rb-mask)](https://github.com/philiprehberger/rb-mask/commits/main)
 
+![philiprehberger-mask](https://raw.githubusercontent.com/philiprehberger/rb-mask/main/package-card.webp)
+
 Data masking library with auto-detect PII redaction for strings and nested structures
 
 ## Requirements

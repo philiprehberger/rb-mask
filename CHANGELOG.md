@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-06-14
+
+### Changed
+- Added package card image to README
+- Bug report template now requires gem version and ruby version
+
+### Fixed
+- detokenize now safely handles tokens containing regex metacharacters
+- CHANGELOG formatting cleanup
+
 ## [0.6.0] - 2026-04-28
 
 ### Added
@@ -67,7 +77,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Sponsor badge to README
 - Fix License section format
 
-
 ## [0.1.9] - 2026-03-24
 
 ### Changed
@@ -108,8 +117,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Add License badge to README
 - Add bug_tracker_uri to gemspec
-
-## [0.1.1] - 2026-03-15
 
 ## [0.1.0] - 2026-03-15
 

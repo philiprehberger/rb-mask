@@ -91,7 +91,7 @@ module Philiprehberger
     # @return [String] the restored string
     def self.detokenize(string, tokens:)
       result = string.dup
-      tokens.each { |token, original| result = result.gsub(token, original) }
+      tokens.each { |token, original| result = result.gsub(token) { original } }
       result
     end
 

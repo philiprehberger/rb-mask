@@ -36,4 +36,11 @@ body:
       label: Ruby version
       placeholder: "e.g., 3.3.0"
     validations:
-      required: false
+      required: true
+  - type: input
+    id: gem-version
+    attributes:
+      label: Gem version
+      placeholder: "e.g., 0.1.0"
+    validations:
+      required: true
