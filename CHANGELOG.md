@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-15
+
+### Added
+- Struct/Data deep masking — `scrub_hash` now converts `Struct`, Ruby 3.2+ `Data`, and other `to_h`-able objects to a scrubbed Hash instead of leaving them untouched
+- Configurable partial reveal via `scrub(str, mode: :partial, reveal: N)` (and `scrub_hash`) to control how many trailing characters are kept
+- Configurable sensitive-key placeholder via `config.filtered_placeholder = '***REDACTED***'` (default `[FILTERED]`)
+
+### Changed
+- Credit-card detection is now Luhn-validated, so non-card digit runs (order IDs, tracking numbers) are no longer masked as cards
+- Built-in detector patterns are memoized as a frozen list, avoiding rebuilding ten hashes and lambdas on every scrub
+
 ## [0.6.1] - 2026-06-14
 
 ### Changed
@@ -126,3 +137,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - String and deep hash/array scrubbing
 - Key-name heuristic detection for sensitive fields
 - Configurable custom pattern registration
+
+[Unreleased]: https://github.com/philiprehberger/rb-mask/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/philiprehberger/rb-mask/compare/v0.6.1...v0.7.0

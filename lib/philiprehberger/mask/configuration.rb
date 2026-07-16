@@ -9,7 +9,9 @@ module Philiprehberger
         access_token refresh_token private_key secret_key
       ].freeze
 
-      attr_reader :sensitive_keys, :detector_priority, :locales
+      DEFAULT_FILTERED_PLACEHOLDER = '[FILTERED]'
+
+      attr_reader :sensitive_keys, :detector_priority, :locales, :filtered_placeholder
 
       def initialize
         @mutex = Mutex.new
@@ -17,6 +19,14 @@ module Philiprehberger
         @sensitive_keys = DEFAULT_SENSITIVE_KEYS.dup
         @detector_priority = nil
         @locales = {}
+        @filtered_placeholder = DEFAULT_FILTERED_PLACEHOLDER
+      end
+
+      # Set the placeholder used for sensitive-key redaction in hash scrubbing
+      #
+      # @param value [String] the replacement string (default +[FILTERED]+)
+      def filtered_placeholder=(value)
+        @mutex.synchronize { @filtered_placeholder = value.to_s }
       end
 
       # Add a custom pattern with a static replacement string

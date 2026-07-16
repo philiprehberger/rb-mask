@@ -15,12 +15,13 @@ module Philiprehberger
     #
     # @param string [String] the input string
     # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
+    # @param reveal [Integer] trailing characters to keep in :partial mode (default 4)
     # @return [String] the scrubbed string
     # @example Mask an email in a string
     #   Philiprehberger::Mask.scrub('Contact user@example.com')
     #   # => "Contact u***@e******.com"
-    def self.scrub(string, mode: :full)
-      Scrubber.call(string, patterns: Configuration.instance.patterns, mode: mode)
+    def self.scrub(string, mode: :full, reveal: 4)
+      Scrubber.call(string, patterns: Configuration.instance.patterns, mode: mode, reveal: reveal)
     end
 
     # Scan a string for PII without modifying it
@@ -46,13 +47,21 @@ module Philiprehberger
     # @param data [Hash, Array] the input structure
     # @param keys [Array<Symbol, String>, nil] specific keys to scrub
     # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
+    # @param reveal [Integer] trailing characters to keep in :partial mode (default 4)
     # @return [Hash, Array] the scrubbed structure
     # @example Redact sensitive keys and PII inside nested structures
     #   Philiprehberger::Mask.scrub_hash(user: { email: 'a@b.com', password: 'secret' })
     #   # => { user: { email: "a***@b.com", password: "[FILTERED]" } }
-    def self.scrub_hash(data, keys: nil, mode: :full)
+    def self.scrub_hash(data, keys: nil, mode: :full, reveal: 4)
       config = Configuration.instance
-      DeepScrubber.call(data, patterns: config.patterns, sensitive_keys: keys || config.sensitive_keys, mode: mode)
+      DeepScrubber.call(
+        data,
+        patterns: config.patterns,
+        sensitive_keys: keys || config.sensitive_keys,
+        mode: mode,
+        reveal: reveal,
+        placeholder: config.filtered_placeholder
+      )
     end
 
     # Deep-walk a hash/array and redact sensitive values with audit trail
@@ -62,7 +71,12 @@ module Philiprehberger
     # @return [Hash] { result:, audit: [{detector:, ...}] }
     def self.scrub_hash_with_audit(data, keys: nil)
       config = Configuration.instance
-      DeepScrubber.call_with_audit(data, patterns: config.patterns, sensitive_keys: keys || config.sensitive_keys)
+      DeepScrubber.call_with_audit(
+        data,
+        patterns: config.patterns,
+        sensitive_keys: keys || config.sensitive_keys,
+        placeholder: config.filtered_placeholder
+      )
     end
 
     # Scrub a string and return an audit trail of what was masked

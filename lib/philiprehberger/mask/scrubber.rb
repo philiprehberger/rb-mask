@@ -9,14 +9,15 @@ module Philiprehberger
       # @param string [String] the input string
       # @param patterns [Array<Hash>] pattern definitions
       # @param mode [Symbol] masking mode (:full, :partial, :format_preserving)
+      # @param reveal [Integer] number of trailing characters to keep in :partial mode
       # @return [String] the scrubbed string
-      def self.call(string, patterns:, mode: :full)
+      def self.call(string, patterns:, mode: :full, reveal: 4)
         return string unless string.is_a?(String)
 
         result = string.dup
         patterns.each do |pat|
           result = result.gsub(pat[:pattern]) do |match|
-            apply_mode(match, pat, mode)
+            guarded?(pat, match) ? match : apply_mode(match, pat, mode, reveal)
           end
         end
         result
@@ -34,6 +35,8 @@ module Philiprehberger
         patterns.each do |pat|
           string.scan(pat[:pattern]) do |_|
             md = Regexp.last_match
+            next if guarded?(pat, md[0])
+
             results << { detector: pat[:name], match: md[0], position: md.begin(0) }
           end
         end
@@ -52,6 +55,8 @@ module Philiprehberger
         result = string.dup
         patterns.each do |pat|
           result = result.gsub(pat[:pattern]) do |match|
+            next match if guarded?(pat, match)
+
             masked = pat[:replacer].call(match)
             audit << {
               detector: pat[:name],
@@ -78,6 +83,8 @@ module Philiprehberger
         result = string.dup
         patterns.each do |pat|
           result = result.gsub(pat[:pattern]) do |match|
+            next match if guarded?(pat, match)
+
             counter += 1
             token = "<TOKEN_#{pat[:name].to_s.upcase}_#{counter}>"
             tokens[token] = match
@@ -87,12 +94,20 @@ module Philiprehberger
         { masked: result, tokens: tokens }
       end
 
-      def self.apply_mode(match, pat, mode)
+      # A guarded pattern (e.g. Luhn-gated credit_card) that rejects the
+      # candidate is left untouched and not reported.
+      def self.guarded?(pat, match)
+        guard = pat[:guard]
+        !guard.nil? && !guard.call(match)
+      end
+      private_class_method :guarded?
+
+      def self.apply_mode(match, pat, mode, reveal)
         case mode
         when :full
           pat[:replacer].call(match)
         when :partial
-          partial_mask(match, pat[:name])
+          partial_mask(match, pat[:name], reveal)
         when :format_preserving
           format_preserving_mask(match)
         else
@@ -101,15 +116,15 @@ module Philiprehberger
       end
       private_class_method :apply_mode
 
-      def self.partial_mask(match, name)
+      def self.partial_mask(match, name, reveal)
         case name
         when :credit_card
           digits = match.gsub(/\D/, '')
-          "****#{digits[-4..]}"
+          "****#{digits[-reveal..]}"
         when :ssn
-          "***-**-#{match[-4..]}"
+          "***-**-#{match[-reveal..]}"
         when :phone
-          "***-***-#{match[-4..]}"
+          "***-***-#{match[-reveal..]}"
         when :email
           local, domain = match.split('@', 2)
           "#{local[0]}***@#{domain}"

@@ -4,12 +4,13 @@ module Philiprehberger
   module Mask
     # Built-in pattern detectors for common PII types
     module Detector
+      # The memoized, frozen list of built-in detectors. Consumers must treat it
+      # as read-only — configuration (priority/locale/custom merges) copies this
+      # list rather than mutating it.
+      #
+      # @return [Array<Hash>] frozen detector definitions
       def self.builtin_patterns
-        [
-          email_pattern, credit_card_pattern, ssn_pattern, phone_pattern,
-          ip_pattern, jwt_pattern, passport_pattern, iban_pattern,
-          drivers_license_pattern, mrn_pattern
-        ]
+        BUILTIN_PATTERNS
       end
 
       def self.email_pattern
@@ -25,7 +26,8 @@ module Philiprehberger
         {
           name: :credit_card,
           pattern: /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{1,4}\b/,
-          replacer: ->(match) { mask_card(match) }
+          replacer: ->(match) { mask_card(match) },
+          guard: ->(match) { luhn_valid?(match) }
         }
       end
       private_class_method :credit_card_pattern
@@ -102,6 +104,29 @@ module Philiprehberger
       end
       private_class_method :mrn_pattern
 
+      # Validate a candidate card number with the Luhn checksum
+      #
+      # Used to gate the credit_card detector so that non-card digit runs
+      # (order IDs, tracking numbers) are not masked as cards.
+      #
+      # @param number [String] the matched candidate (may include separators)
+      # @return [Boolean] true when the digits pass the Luhn check
+      def self.luhn_valid?(number)
+        digits = number.to_s.gsub(/\D/, '')
+        return false if digits.length < 13
+
+        sum = 0
+        digits.reverse.each_char.with_index do |char, index|
+          value = char.to_i
+          if index.odd?
+            value *= 2
+            value -= 9 if value > 9
+          end
+          sum += value
+        end
+        (sum % 10).zero?
+      end
+
       def self.mask_email(email)
         local, domain = email.split('@', 2)
         "#{local[0]}***@#{domain[0]}******.#{domain.split('.').last}"
@@ -115,6 +140,12 @@ module Philiprehberger
         ['****', '****', '****', last_four].join(sep)
       end
       private_class_method :mask_card
+
+      BUILTIN_PATTERNS = [
+        email_pattern, credit_card_pattern, ssn_pattern, phone_pattern,
+        ip_pattern, jwt_pattern, passport_pattern, iban_pattern,
+        drivers_license_pattern, mrn_pattern
+      ].map(&:freeze).freeze
     end
   end
 end

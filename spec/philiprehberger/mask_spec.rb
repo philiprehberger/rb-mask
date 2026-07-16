@@ -152,9 +152,9 @@ RSpec.describe Philiprehberger::Mask do
     end
 
     it 'masks credit card preserving last four digits with no separators' do
-      result = described_class.scrub('Card: 5500000000005559')
-      expect(result).to include('5559')
-      expect(result).not_to include('5500000000005559')
+      result = described_class.scrub('Card: 5555555555554444')
+      expect(result).to include('4444')
+      expect(result).not_to include('5555555555554444')
     end
 
     it 'masks multiple IP addresses in one string' do
@@ -1282,6 +1282,134 @@ RSpec.describe Philiprehberger::Mask do
       result = described_class.scrub_hash(data)
       expect(result[:info][:ref]).to include('ACCT-XXXX')
       expect(result[:info][:ref]).not_to include('ACCT-999')
+    end
+  end
+
+  describe 'Luhn-gated credit cards' do
+    it 'masks a Luhn-valid card number' do
+      result = described_class.scrub('Card: 4111 1111 1111 1111')
+      expect(result).not_to include('4111 1111 1111 1111')
+      expect(result).to include('1111')
+    end
+
+    it 'does not mask a Luhn-invalid 16-digit run' do
+      order = '1234567812345678'
+      expect(described_class.scrub("Order: #{order}")).to eq("Order: #{order}")
+    end
+
+    it 'omits a Luhn-invalid run from detect' do
+      expect(described_class.detect('Order: 1234567812345678')).to eq([])
+    end
+
+    it 'omits a Luhn-invalid run from the audit trail' do
+      result = described_class.scrub_with_audit('Order: 1234567812345678')
+      expect(result[:audit]).to be_empty
+      expect(result[:result]).to eq('Order: 1234567812345678')
+    end
+
+    it 'does not tokenize a Luhn-invalid run' do
+      result = described_class.tokenize('Order: 1234567812345678')
+      expect(result[:tokens]).to be_empty
+      expect(result[:masked]).to eq('Order: 1234567812345678')
+    end
+
+    it 'exposes a Luhn helper on Detector' do
+      expect(Philiprehberger::Mask::Detector.luhn_valid?('4111111111111111')).to be(true)
+      expect(Philiprehberger::Mask::Detector.luhn_valid?('1234567812345678')).to be(false)
+    end
+  end
+
+  describe 'Struct and Data deep masking' do
+    it 'scrubs a Struct into a Hash' do
+      klass = Struct.new(:email, :password)
+      result = described_class.scrub_hash(klass.new('alice@example.com', 'secret123'))
+      expect(result).to eq(email: 'a***@e******.com', password: '[FILTERED]')
+    end
+
+    it 'scrubs a Data object into a Hash', if: defined?(Data) && Data.respond_to?(:define) do
+      klass = Data.define(:email, :token)
+      result = described_class.scrub_hash(klass.new(email: 'bob@example.com', token: 'abc123'))
+      expect(result).to eq(email: 'b***@e******.com', token: '[FILTERED]')
+    end
+
+    it 'scrubs a Struct nested inside a hash' do
+      klass = Struct.new(:ssn)
+      result = described_class.scrub_hash({ user: klass.new('123-45-6789') })
+      expect(result[:user]).to eq(ssn: '***-**-6789')
+    end
+
+    it 'records Struct members in the audit trail' do
+      klass = Struct.new(:password)
+      result = described_class.scrub_hash_with_audit(klass.new('secret'))
+      expect(result[:result]).to eq(password: '[FILTERED]')
+      expect(result[:audit].map { |e| e[:detector] }).to include(:sensitive_key)
+    end
+
+    it 'leaves nil untouched' do
+      expect(described_class.scrub_hash({ a: nil })).to eq(a: nil)
+    end
+  end
+
+  describe 'configurable reveal count' do
+    it 'reveals a custom number of trailing digits on a card' do
+      result = described_class.scrub('Card: 4111-1111-1111-1111', mode: :partial, reveal: 8)
+      expect(result).to include('****11111111')
+    end
+
+    it 'threads reveal through scrub_hash' do
+      result = described_class.scrub_hash({ card: '4111-1111-1111-1111' }, mode: :partial, reveal: 6)
+      expect(result[:card]).to eq('****111111')
+    end
+
+    it 'defaults to revealing the last 4' do
+      result = described_class.scrub('Card: 4111-1111-1111-1111', mode: :partial)
+      expect(result).to include('****1111')
+    end
+  end
+
+  describe 'configurable filtered placeholder' do
+    it 'uses a custom placeholder for sensitive keys' do
+      described_class.configure { |c| c.filtered_placeholder = '***REDACTED***' }
+      result = described_class.scrub_hash({ password: 'secret' })
+      expect(result[:password]).to eq('***REDACTED***')
+    end
+
+    it 'reflects the custom placeholder in the audit trail' do
+      described_class.configure { |c| c.filtered_placeholder = '<<HIDDEN>>' }
+      result = described_class.scrub_hash_with_audit({ token: 'abc' })
+      expect(result[:result][:token]).to eq('<<HIDDEN>>')
+      expect(result[:audit].first[:masked]).to eq('<<HIDDEN>>')
+    end
+
+    it 'defaults to [FILTERED]' do
+      expect(described_class.scrub_hash({ password: 'secret' })[:password]).to eq('[FILTERED]')
+    end
+  end
+
+  describe 'memoized built-in patterns' do
+    it 'returns the same frozen list on repeated calls' do
+      first = Philiprehberger::Mask::Detector.builtin_patterns
+      second = Philiprehberger::Mask::Detector.builtin_patterns
+      expect(first).to be(second)
+      expect(first).to be_frozen
+    end
+
+    it 'still applies configuration after memoization' do
+      described_class.configure do |c|
+        c.add_pattern(:widget, /WID-\d+/, replacement: 'WID-XXX')
+      end
+      expect(described_class.scrub('ref WID-123')).to include('WID-XXX')
+      # built-in list is unaffected by the custom merge
+      builtin_names = Philiprehberger::Mask::Detector.builtin_patterns.map { |p| p[:name] }
+      expect(builtin_names).not_to include(:widget)
+    end
+
+    it 'still respects reset_configuration!' do
+      described_class.configure { |c| c.add_pattern(:temp, /TMP-\d+/, replacement: 'TMP') }
+      described_class.reset_configuration!
+      expect(described_class.scrub('ref TMP-1')).to eq('ref TMP-1')
+      builtin_names = Philiprehberger::Mask::Detector.builtin_patterns.map { |p| p[:name] }
+      expect(builtin_names).to include(:email, :credit_card)
     end
   end
 end

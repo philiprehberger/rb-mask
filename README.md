@@ -64,6 +64,32 @@ Philiprehberger::Mask.scrub_hash({
 # => { name: "Alice", email: "a***@e******.com", password: "[FILTERED]", nested: { ssn: "***-**-6789" } }
 ```
 
+`scrub_hash` also walks `Struct`, Ruby 3.2+ `Data`, and other `to_h`-able objects,
+returning a scrubbed `Hash`:
+
+```ruby
+User = Struct.new(:email, :password)
+Philiprehberger::Mask.scrub_hash(User.new("alice@example.com", "secret123"))
+# => { email: "a***@e******.com", password: "[FILTERED]" }
+
+Account = Data.define(:email, :token)
+Philiprehberger::Mask.scrub_hash(Account.new(email: "bob@example.com", token: "abc"))
+# => { email: "b***@e******.com", token: "[FILTERED]" }
+```
+
+### Custom Redaction Placeholder
+
+The sensitive-key placeholder (default `[FILTERED]`) is configurable:
+
+```ruby
+Philiprehberger::Mask.configure do |c|
+  c.filtered_placeholder = "***REDACTED***"
+end
+
+Philiprehberger::Mask.scrub_hash({ password: "secret" })
+# => { password: "***REDACTED***" }
+```
+
 ### Partial Masking
 
 Show partial information like last 4 digits or first initial:
@@ -74,6 +100,16 @@ Philiprehberger::Mask.scrub("Card: 4111-1111-1111-1111", mode: :partial)
 
 Philiprehberger::Mask.scrub("Email: user@example.com", mode: :partial)
 # => "Email: u***@example.com"
+```
+
+Control how many trailing characters are revealed with `reveal:` (default `4`):
+
+```ruby
+Philiprehberger::Mask.scrub("Card: 4111-1111-1111-1111", mode: :partial, reveal: 8)
+# => "Card: ****11111111"
+
+Philiprehberger::Mask.scrub_hash({ card: "4111-1111-1111-1111" }, mode: :partial, reveal: 6)
+# => { card: "****111111" }
 ```
 
 ### Format-Preserving Masking
@@ -228,7 +264,7 @@ end
 | Detector | Pattern | Masking |
 |----------|---------|---------|
 | Email | `user@example.com` | `u***@e******.com` |
-| Credit Card | `4111-1111-1111-1111` | `****-****-****-1111` |
+| Credit Card | `4111-1111-1111-1111` | `****-****-****-1111` (Luhn-validated) |
 | SSN | `123-45-6789` | `***-**-6789` |
 | Phone | `555-123-4567` | `***-***-4567` |
 | IP Address | `192.168.1.1` | `***.***.***.***` |
@@ -242,9 +278,9 @@ end
 
 | Method | Description |
 |--------|-------------|
-| `Mask.scrub(string, mode: :full)` | Detect and redact PII in a string |
+| `Mask.scrub(string, mode: :full, reveal: 4)` | Detect and redact PII in a string; credit cards are Luhn-validated. `reveal:` sets kept trailing chars in `:partial` mode |
 | `Mask.detect(string, locale: nil)` | Non-mutating scan; returns `[{ detector:, match:, position: }, ...]` |
-| `Mask.scrub_hash(hash, keys: nil, mode: :full)` | Deep-walk and redact hash values |
+| `Mask.scrub_hash(hash, keys: nil, mode: :full, reveal: 4)` | Deep-walk and redact hash values; also converts `Struct`/`Data`/`to_h`-able objects to a scrubbed Hash |
 | `Mask.scrub_hash_with_audit(hash, keys: nil)` | Deep-walk, redact, and return audit trail with paths |
 | `Mask.scrub_with_audit(string)` | Scrub and return audit trail of detections |
 | `Mask.batch_scrub(strings, **opts)` | Process array of strings with shared compiled patterns (raises `ArgumentError` on non-Array; empty Array returns `[]`) |
@@ -254,7 +290,7 @@ end
 | `Mask.detokenize(string, tokens:)` | Restore original values from tokens |
 | `Mask.configure_priority(detector_order)` | Set detector evaluation order |
 | `Mask.add_locale(locale, patterns)` | Register locale-specific detection patterns |
-| `Mask.configure { \|c\| ... }` | Register custom patterns, detectors, or sensitive keys |
+| `Mask.configure { \|c\| ... }` | Register custom patterns, detectors, sensitive keys, or the `filtered_placeholder` |
 | `Mask.reset_configuration!` | Reset to default patterns and sensitive keys |
 
 ## Development
