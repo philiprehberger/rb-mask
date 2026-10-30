@@ -52,6 +52,17 @@ Philiprehberger::Mask.detect("Hello, world.")
 # => []
 ```
 
+Use `pii?` for a quick yes/no check and `summary` for per-detector counts.
+Both share the detectors, priority, and locales used by `detect`:
+
+```ruby
+Philiprehberger::Mask.pii?("Contact user@example.com")
+# => true
+
+Philiprehberger::Mask.summary("a@example.com, b@example.com, SSN 123-45-6789")
+# => { email: 2, ssn: 1 }
+```
+
 ### Hash Scrubbing
 
 ```ruby
@@ -280,6 +291,8 @@ end
 |--------|-------------|
 | `Mask.scrub(string, mode: :full, reveal: 4)` | Detect and redact PII in a string; credit cards are Luhn-validated. `reveal:` sets kept trailing chars in `:partial` mode |
 | `Mask.detect(string, locale: nil)` | Non-mutating scan; returns `[{ detector:, match:, position: }, ...]` |
+| `Mask.pii?(string, locale: nil)` | `true` when any detector matches; `false` for nil, empty, or PII-free input |
+| `Mask.summary(string, locale: nil)` | Count matches per detector; returns `{ detector => count }` (empty Hash when no PII) |
 | `Mask.scrub_hash(hash, keys: nil, mode: :full, reveal: 4)` | Deep-walk and redact hash values; also converts `Struct`/`Data`/`to_h`-able objects to a scrubbed Hash |
 | `Mask.scrub_hash_with_audit(hash, keys: nil)` | Deep-walk, redact, and return audit trail with paths |
 | `Mask.scrub_with_audit(string)` | Scrub and return audit trail of detections |

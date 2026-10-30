@@ -42,6 +42,38 @@ module Philiprehberger
       Scrubber.scan(string, patterns: Configuration.instance.patterns(locale: locale))
     end
 
+    # Check whether a string contains any PII
+    #
+    # Uses the same detectors as {.detect}, so priority, custom detectors, and
+    # locale patterns behave identically. Non-string input (including +nil+)
+    # and empty strings return +false+.
+    #
+    # @param string [String] the input string
+    # @param locale [Symbol, nil] optional locale for locale-specific patterns
+    # @return [Boolean] true when at least one detector matches
+    # @example Guard a log line before writing it
+    #   Philiprehberger::Mask.pii?('Contact user@example.com')
+    #   # => true
+    def self.pii?(string, locale: nil)
+      !detect(string, locale: locale).empty?
+    end
+
+    # Count detector matches in a string
+    #
+    # Built on {.detect}, so priority, custom detectors, and locale patterns
+    # behave identically. Keys appear in detection order. Non-string input
+    # (including +nil+) and strings without PII return an empty Hash.
+    #
+    # @param string [String] the input string
+    # @param locale [Symbol, nil] optional locale for locale-specific patterns
+    # @return [Hash{Symbol => Integer}] detector name to match count
+    # @example Summarize PII in a string
+    #   Philiprehberger::Mask.summary('a@b.com, c@d.com, SSN 123-45-6789')
+    #   # => { email: 2, ssn: 1 }
+    def self.summary(string, locale: nil)
+      detect(string, locale: locale).map { |entry| entry[:detector] }.tally
+    end
+
     # Deep-walk a hash/array and redact sensitive values
     #
     # @param data [Hash, Array] the input structure

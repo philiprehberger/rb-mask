@@ -344,6 +344,82 @@ RSpec.describe Philiprehberger::Mask do
     end
   end
 
+  describe '.pii?' do
+    it 'returns true when PII is present' do
+      expect(described_class.pii?('Contact user@example.com')).to be(true)
+    end
+
+    it 'returns false when no PII is present' do
+      expect(described_class.pii?('Hello, world.')).to be(false)
+    end
+
+    it 'returns false for nil, empty, and non-string input' do
+      expect(described_class.pii?(nil)).to be(false)
+      expect(described_class.pii?('')).to be(false)
+      expect(described_class.pii?(42)).to be(false)
+    end
+
+    it 'does not modify the input' do
+      input = 'SSN: 123-45-6789'
+      original = input.dup
+      described_class.pii?(input)
+      expect(input).to eq(original)
+    end
+
+    it 'ignores Luhn-invalid card numbers' do
+      expect(described_class.pii?('Order 1234 5678 9012 3456')).to be(false)
+    end
+
+    it 'recognizes custom detectors' do
+      described_class.configure { |c| c.detect(:employee_id, /EMP\d{6}/) { |_match| '[EMP]' } }
+      expect(described_class.pii?('Badge EMP123456')).to be(true)
+    end
+
+    it 'respects locale-specific patterns' do
+      described_class.add_locale(:de, phone: /\b0\d{3}-\d{7}\b/)
+      expect(described_class.pii?('Call 0301-1234567', locale: :de)).to be(true)
+    end
+  end
+
+  describe '.summary' do
+    it 'counts matches per detector' do
+      result = described_class.summary('a@example.com, b@example.com, SSN 123-45-6789')
+      expect(result).to eq(email: 2, ssn: 1)
+    end
+
+    it 'agrees with detect' do
+      input = 'Email user@example.com or call 555-123-4567'
+      expected = described_class.detect(input).map { |r| r[:detector] }.tally
+      expect(described_class.summary(input)).to eq(expected)
+    end
+
+    it 'returns an empty hash when no PII is present' do
+      expect(described_class.summary('Hello, world.')).to eq({})
+    end
+
+    it 'returns an empty hash for nil, empty, and non-string input' do
+      expect(described_class.summary(nil)).to eq({})
+      expect(described_class.summary('')).to eq({})
+      expect(described_class.summary(42)).to eq({})
+    end
+
+    it 'includes custom detectors' do
+      described_class.configure { |c| c.detect(:order, /ORD-\d+/) { |_match| '[ORDER]' } }
+      expect(described_class.summary('ORD-1 and ORD-22')).to eq(order: 2)
+    end
+
+    it 'respects locale-specific patterns' do
+      described_class.add_locale(:de, phone: /\b0\d{3}-\d{7}\b/)
+      expect(described_class.summary('Call 0301-1234567', locale: :de)).to include(phone: 1)
+    end
+
+    it 'orders keys by detector priority' do
+      described_class.configure_priority(%i[ssn email])
+      result = described_class.summary('user@example.com 123-45-6789')
+      expect(result.keys.first(2)).to eq(%i[ssn email])
+    end
+  end
+
   describe '.tokenize' do
     it 'replaces PII with tokens' do
       result = described_class.tokenize('Email: user@example.com')

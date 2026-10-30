@@ -14,6 +14,11 @@ body:
     attributes:
       label: Steps to reproduce
       description: Minimal code or steps to reproduce the issue
+      placeholder: |
+        ```ruby
+        require "philiprehberger/mask"
+        # steps to reproduce
+        ```
     validations:
       required: true
   - type: textarea

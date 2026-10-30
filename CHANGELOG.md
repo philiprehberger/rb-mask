@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-30
+
+### Added
+- `Mask.pii?(string, locale: nil)` returns `true` when any detector matches, sharing `detect`'s priority, custom detectors, and locales
+- `Mask.summary(string, locale: nil)` returns a `{ detector => count }` Hash of matches
+
+### Changed
+- Bug report template now includes a reproduction code placeholder
+
 ## [0.7.0] - 2026-07-15
 
 ### Added
